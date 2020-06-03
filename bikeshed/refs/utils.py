@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 from collections import defaultdict
 from .. import config
@@ -142,9 +142,12 @@ def linkTextVariations(str, linkType):
             yield "throw"
 
     if config.linkTypeIn(linkType, "idl"):
-        # Let people refer to escaped IDL names with their "real" names (without the underscore)
-        if str[:1] != "_":
+        # _or <-> or
+        if str[:1] == "_":
+            yield str[1:]
+        else:
             yield "_" + str
+
 
         # Let people refer to methods without the parens.
         # Since attrs and methods live in the same namespace, this is safe.
@@ -162,8 +165,6 @@ def stripLineBreaks(obj):
     it = obj.items() if isinstance(obj, dict) else enumerate(obj)
     for key, val in it:
         if isinstance(val, str):
-            obj[key] = unicode(val, encoding="utf-8").rstrip("\n")
-        elif isinstance(val, unicode):
             obj[key] = val.rstrip("\n")
         elif isinstance(val, dict) or isinstance(val, list):
             stripLineBreaks(val)

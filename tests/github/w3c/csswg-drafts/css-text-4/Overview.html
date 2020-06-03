@@ -50,91 +50,6 @@
 			.quarter { font-size: 25%; }
 			samp[lang="ja"] { font-family: "MS Gothic", "Osaka-Mono", monospace }
 		</style>
-<style>/* style-md-lists */
-
-/* This is a weird hack for me not yet following the commonmark spec
-   regarding paragraph and lists. */
-[data-md] > :first-child {
-    margin-top: 0;
-}
-[data-md] > :last-child {
-    margin-bottom: 0;
-}</style>
-<style>/* style-selflinks */
-
-.heading, .issue, .note, .example, li, dt {
-    position: relative;
-}
-a.self-link {
-    position: absolute;
-    top: 0;
-    left: calc(-1 * (3.5rem - 26px));
-    width: calc(3.5rem - 26px);
-    height: 2em;
-    text-align: center;
-    border: none;
-    transition: opacity .2s;
-    opacity: .5;
-}
-a.self-link:hover {
-    opacity: 1;
-}
-.heading > a.self-link {
-    font-size: 83%;
-}
-li > a.self-link {
-    left: calc(-1 * (3.5rem - 26px) - 2em);
-}
-dfn > a.self-link {
-    top: auto;
-    left: auto;
-    opacity: 0;
-    width: 1.5em;
-    height: 1.5em;
-    background: gray;
-    color: white;
-    font-style: normal;
-    transition: opacity .2s, background-color .2s, color .2s;
-}
-dfn:hover > a.self-link {
-    opacity: 1;
-}
-dfn > a.self-link:hover {
-    color: black;
-}
-
-a.self-link::before            { content: "¶"; }
-.heading > a.self-link::before { content: "§"; }
-dfn > a.self-link::before      { content: "#"; }</style>
-<style>/* style-counters */
-
-body {
-    counter-reset: example figure issue;
-}
-.issue {
-    counter-increment: issue;
-}
-.issue:not(.no-marker)::before {
-    content: "Issue " counter(issue);
-}
-
-.example {
-    counter-increment: example;
-}
-.example:not(.no-marker)::before {
-    content: "Example " counter(example);
-}
-.invalid.example:not(.no-marker)::before,
-.illegal.example:not(.no-marker)::before {
-    content: "Invalid Example" counter(example);
-}
-
-figcaption {
-    counter-increment: figure;
-}
-figcaption:not(.no-marker)::before {
-    content: "Figure " counter(figure) " ";
-}</style>
 <style>/* style-autolinks */
 
 .css.css, .property.property, .descriptor.descriptor {
@@ -197,6 +112,35 @@ pre .property::before, pre .property::after {
 [data-link-type=biblio] {
     white-space: pre;
 }</style>
+<style>/* style-counters */
+
+body {
+    counter-reset: example figure issue;
+}
+.issue {
+    counter-increment: issue;
+}
+.issue:not(.no-marker)::before {
+    content: "Issue " counter(issue);
+}
+
+.example {
+    counter-increment: example;
+}
+.example:not(.no-marker)::before {
+    content: "Example " counter(example);
+}
+.invalid.example:not(.no-marker)::before,
+.illegal.example:not(.no-marker)::before {
+    content: "Invalid Example" counter(example);
+}
+
+figcaption {
+    counter-increment: figure;
+}
+figcaption:not(.no-marker)::before {
+    content: "Figure " counter(figure) " ";
+}</style>
 <style>/* style-dfn-panel */
 
 .dfn-panel {
@@ -234,6 +178,62 @@ pre .property::before, pre .property::after {
 
 .dfn-paneled { cursor: pointer; }
 </style>
+<style>/* style-md-lists */
+
+/* This is a weird hack for me not yet following the commonmark spec
+   regarding paragraph and lists. */
+[data-md] > :first-child {
+    margin-top: 0;
+}
+[data-md] > :last-child {
+    margin-bottom: 0;
+}</style>
+<style>/* style-selflinks */
+
+.heading, .issue, .note, .example, li, dt {
+    position: relative;
+}
+a.self-link {
+    position: absolute;
+    top: 0;
+    left: calc(-1 * (3.5rem - 26px));
+    width: calc(3.5rem - 26px);
+    height: 2em;
+    text-align: center;
+    border: none;
+    transition: opacity .2s;
+    opacity: .5;
+}
+a.self-link:hover {
+    opacity: 1;
+}
+.heading > a.self-link {
+    font-size: 83%;
+}
+li > a.self-link {
+    left: calc(-1 * (3.5rem - 26px) - 2em);
+}
+dfn > a.self-link {
+    top: auto;
+    left: auto;
+    opacity: 0;
+    width: 1.5em;
+    height: 1.5em;
+    background: gray;
+    color: white;
+    font-style: normal;
+    transition: opacity .2s, background-color .2s, color .2s;
+}
+dfn:hover > a.self-link {
+    opacity: 1;
+}
+dfn > a.self-link:hover {
+    color: black;
+}
+
+a.self-link::before            { content: "¶"; }
+.heading > a.self-link::before { content: "§"; }
+dfn > a.self-link::before      { content: "#"; }</style>
 <style>/* style-syntax-highlighting */
 
 .highlight:not(.idl) { background: hsl(24, 20%, 95%); }
@@ -338,10 +338,10 @@ c-[il] { color: #000000 } /* Literal.Number.Integer.Long */
       <dd class="editor p-author h-card vcard" data-editor-id="45369"><a class="p-name fn u-email email" href="mailto:kojiishi@gmail.com">Koji Ishii</a> (<span class="p-org org">Google</span>)
       <dd class="editor p-author h-card vcard" data-editor-id="46659"><a class="p-name fn u-email email" href="mailto:stearns@adobe.com">Alan Stearns</a> (<span class="p-org org">Adobe Systems</span>)
       <dd class="editor p-author h-card vcard" data-editor-id="43241"><a class="p-name fn u-url url" href="https://florian.rivoal.net">Florian Rivoal</a> (<span class="p-org org">Invited Expert</span>)
-      <dt>Suggest an Edit for this Spec:
-      <dd><a href="https://github.com/w3c/csswg-drafts/blob/master/css-text-4/Overview.bs">GitHub Editor</a>
       <dt>Issue Tracking:
       <dd><a href="https://github.com/w3c/csswg-drafts/labels/css-text-4">GitHub Issues</a>
+      <dt>Suggest an Edit for this Spec:
+      <dd><a href="https://github.com/w3c/csswg-drafts/blob/master/css-text-4/Overview.bs">GitHub Editor</a>
      </dl>
     </div>
    </details>
@@ -1310,7 +1310,7 @@ Berlin, Germany
      <li>At least X characters. 
      <li>Percentage-based. 
     </ul>
-    <p>Suggestion for value space is ''match-indent | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" id="ref-for-length-value" title="Expands to: em | vb | ch | cm | vh | vi | in | ex | vw | ic | pt | px | lh | pc | rem | rlh | vmax | advance measure | vmin | mm | cap | q">&lt;length></a> | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#percentage-value" id="ref-for-percentage-value">&lt;percentage></a>''
+    <p>Suggestion for value space is ''match-indent | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" id="ref-for-length-value" title="Expands to: advance measure | cap | ch | cm | em | ex | ic | in | lh | mm | pc | pt | px | q | rem | rlh | vb | vh | vi | vmax | vmin | vw">&lt;length></a> | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#percentage-value" id="ref-for-percentage-value">&lt;percentage></a>''
 		(with <span class="css">Xch</span> given as an example to make that use case clear).
 		Alternately <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#integer-value" id="ref-for-integer-value">&lt;integer></a> could actually count the characters.</p>
     <p>It’s unclear how this would interact with text balancing (above);
@@ -1428,7 +1428,7 @@ Berlin, Germany
 	between parts of hyphenated words.
 	Values have the following meanings:</p>
    <dl>
-    <dt><dfn class="css" data-dfn-for="hyphenate-character" data-dfn-type="value" data-export id="valdef-hyphenate-character-auto">auto<a class="self-link" href="#valdef-hyphenate-character-auto"></a></dfn> 
+    <dt><dfn class="dfn-paneled css" data-dfn-for="hyphenate-character" data-dfn-type="value" data-export id="valdef-hyphenate-character-auto">auto</dfn> 
     <dd> Specifies that the user agent should find an appropriate string
 			based on the <a data-link-type="dfn" href="https://drafts.csswg.org/css-text-3/#content-language" id="ref-for-content-language③">content language</a>’s typographic conventions,
 			possibly from the same source as the hyphenation dictionary. 
@@ -1914,7 +1914,7 @@ Antarctica.
       <td><dfn class="dfn-paneled css" data-dfn-type="property" data-export id="propdef-line-padding">line-padding</dfn>
      <tr class="value">
       <th><a href="https://drafts.csswg.org/css-values/#value-defs">Value:</a>
-      <td class="prod"><a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" id="ref-for-length-value①" title="Expands to: em | vb | ch | cm | vh | vi | in | ex | vw | ic | pt | px | lh | pc | rem | rlh | vmax | advance measure | vmin | mm | cap | q">&lt;length></a> 
+      <td class="prod"><a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" id="ref-for-length-value①" title="Expands to: advance measure | cap | ch | cm | em | ex | ic | in | lh | mm | pc | pt | px | q | rem | rlh | vb | vh | vi | vmax | vmin | vw">&lt;length></a> 
      <tr>
       <th><a href="https://drafts.csswg.org/css-cascade/#initial-values">Initial:</a>
       <td>0 
@@ -2013,7 +2013,7 @@ em   { background: green; color: white; }
       The user agent chooses a set of typographically high quality spacing values.
                         Different user agents running on different platforms may pick different values. 
      <p class="note" role="note"><span>Note:</span> These spacing values may or may not match OS platform conventions.</p>
-     <p class="note" role="note"><span>Note:</span> The behavior of <a class="css" data-link-type="maybe" href="#valdef-wrap-before-auto" id="ref-for-valdef-wrap-before-auto①">auto</a> might not be achievable with any combination of other values of <a class="property" data-link-type="propdesc" href="#propdef-text-spacing" id="ref-for-propdef-text-spacing①">text-spacing</a>.</p>
+     <p class="note" role="note"><span>Note:</span> The behavior of <a class="css" data-link-type="maybe" href="#valdef-hyphenate-character-auto" id="ref-for-valdef-hyphenate-character-auto">auto</a> might not be achievable with any combination of other values of <a class="property" data-link-type="propdesc" href="#propdef-text-spacing" id="ref-for-propdef-text-spacing①">text-spacing</a>.</p>
     <dt><dfn class="css" data-dfn-for="text-spacing" data-dfn-type="value" data-export id="valdef-text-spacing-ideograph-alpha">ideograph-alpha<a class="self-link" href="#valdef-text-spacing-ideograph-alpha"></a></dfn> 
     <dd>
       Creates 1/4em extra spacing between runs of <a data-link-type="dfn" href="#ideographs" id="ref-for-ideographs">ideographs</a> and <a data-link-type="dfn" href="#non-ideographic-letters" id="ref-for-non-ideographic-letters">non-ideographic letters</a>. 
@@ -2172,8 +2172,8 @@ em   { background: green; color: white; }
 			or if the next character is a <a data-link-type="dfn" href="#fullwidth-opening-punctuation" id="ref-for-fullwidth-opening-punctuation⑤">fullwidth opening punctuation</a> of a larger <a class="property" data-link-type="propdesc" href="https://drafts.csswg.org/css-fonts-3/#propdef-font-size" id="ref-for-propdef-font-size①">font-size</a>.
 			Else set it full-width. 
    </ul>
-   <div class="example" id="example-ac299d6e">
-    <a class="self-link" href="#example-ac299d6e"></a> The following example table lists the punctuation pairs
+   <div class="example" id="example-939a2863">
+    <a class="self-link" href="#example-939a2863"></a> The following example table lists the punctuation pairs
 		affected by adjancent-pairs trimming.
 		It uses halfwidth equivalents to approximate the trimming effect. 
     <table class="data">
@@ -3606,7 +3606,7 @@ no-compress || ideograph-alpha || ideograph-numeric || punctuation
      <li>At least X characters. 
      <li>Percentage-based. 
     </ul>
-    <p>Suggestion for value space is ''match-indent | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" title="Expands to: em | vb | ch | cm | vh | vi | in | ex | vw | ic | pt | px | lh | pc | rem | rlh | vmax | advance measure | vmin | mm | cap | q">&lt;length></a> | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#percentage-value">&lt;percentage></a>''
+    <p>Suggestion for value space is ''match-indent | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#length-value" title="Expands to: advance measure | cap | ch | cm | em | ex | ic | in | lh | mm | pc | pt | px | q | rem | rlh | vb | vh | vi | vmax | vmin | vw">&lt;length></a> | <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#percentage-value">&lt;percentage></a>''
 		(with <span class="css">Xch</span> given as an example to make that use case clear).
 		Alternately <a class="production css" data-link-type="type" href="https://drafts.csswg.org/css-values-3/#integer-value">&lt;integer></a> could actually count the characters.</p>
     <p>It’s unclear how this would interact with text balancing (above);
@@ -3882,8 +3882,6 @@ Inline breaks between boxes: the wrap-before/wrap-after properties</a>
    <ul>
     <li><a href="#ref-for-valdef-wrap-before-auto">5.2. 
 Inline breaks between boxes: the wrap-before/wrap-after properties</a>
-    <li><a href="#ref-for-valdef-wrap-before-auto①">10.2. 
-Character Class Spacing: the text-spacing property</a>
    </ul>
   </aside>
   <aside class="dfn-panel" data-for="valdef-wrap-before-avoid">
@@ -3929,6 +3927,13 @@ Shorthand for White Space and Wrapping: the white-space property</a> <a href="#r
     <li><a href="#ref-for-propdef-hyphenate-character">8.1. 
 Hyphens: the hyphenate-character property</a> <a href="#ref-for-propdef-hyphenate-character①">(2)</a> <a href="#ref-for-propdef-hyphenate-character②">(3)</a>
     <li><a href="#ref-for-propdef-hyphenate-character③"> Changes</a>
+   </ul>
+  </aside>
+  <aside class="dfn-panel" data-for="valdef-hyphenate-character-auto">
+   <b><a href="#valdef-hyphenate-character-auto">#valdef-hyphenate-character-auto</a></b><b>Referenced in:</b>
+   <ul>
+    <li><a href="#ref-for-valdef-hyphenate-character-auto">10.2. 
+Character Class Spacing: the text-spacing property</a>
    </ul>
   </aside>
   <aside class="dfn-panel" data-for="propdef-hyphenate-limit-zone">

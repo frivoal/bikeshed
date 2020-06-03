@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import hashlib
 import itertools
@@ -50,7 +50,7 @@ def handleBikeshedInclude(el, doc):
         # can't use just path, because they're relative; including "foo/bar.txt" might use "foo/bar.txt" further nested
         # can't use just content, because then you can't do the same thing twice.
         # combined does a good job unless you purposely pervert it
-        hash = hashlib.md5(path + ''.join(lines).encode("ascii", "xmlcharrefreplace")).hexdigest()
+        hash = hashlib.md5((path + ''.join(lines)).encode("ascii", "xmlcharrefreplace")).hexdigest()
         if el.get('hash'):
             # This came from another included file, check if it's a loop-include
             if hash in el.get('hash'):
@@ -108,7 +108,7 @@ def handleCodeInclude(el, doc):
                 if not el.get("line-start"):
                     # If manually overridden, leave it alone,
                     # but otherwise DWIM.
-                    el.set("line-start", unicode(start))
+                    el.set("line-start", str(start))
     appendChild(el, *lines)
 
 
@@ -130,7 +130,7 @@ def handleRawInclude(el, doc):
 
 def parseRangeString(rangeStr):
     rangeStr = re.sub(r"\s*", "", rangeStr)
-    return filter(None, (parseSingleRange(x) for x in rangeStr.split(",")))
+    return [_f for _f in (parseSingleRange(x) for x in rangeStr.split(",")) if _f]
 
 def parseSingleRange(item):
     if "-" in item:

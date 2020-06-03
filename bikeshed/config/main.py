@@ -1,23 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import collections
 import io
 import lxml
 import os
 import re
-
-from ..enum import Enum
-
-errorLevel = ["fatal"]
-quiet = True
-useReadonlyData = False
-dryRun = False
-printMode = "console"
-testAnnotationURL = "https://test.csswg.org/harness/annotate.js"
-
-
-refStatus = Enum("current", "snapshot")
-
 
 def englishFromList(items, conjunction="or"):
     # Format a list of strings into an English list.
@@ -162,7 +149,7 @@ _groupFromKeyCache = {}
 
 def flatten(l):
     for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, basestring) and not lxml.etree.iselement(el):
+        if isinstance(el, collections.Iterable) and not isinstance(el, str) and not lxml.etree.iselement(el):
             for sub in flatten(el):
                 yield sub
         else:
@@ -180,13 +167,20 @@ def docPath(doc, *pathSegs):
     startPath = os.path.dirname(os.path.abspath(doc.inputSource))
     return os.path.join(startPath, *pathSegs)
 
-def errorLevelAt(target):
-    levels = {"nothing":0, "fatal":1, "link-error":2, "warning":3, "everything":1000}
-    currentLevel = levels[errorLevel[0]]
-    targetLevel = levels[target]
-    return currentLevel >= targetLevel
 
-def setErrorLevel(level=None):
-    if level is None:
-        level = "fatal"
-    errorLevel[0] = level
+def doEvery(s, action, lastTime=None):
+    # Takes an action every N seconds.
+    # Pass it the duration and the last time it took the action;
+    # it returns the time it last took the action
+    # (possibly just now).
+    # If you want to take action on first call,
+    # pass 0 as lastTime;
+    # otherwise it won't take action until N seconds.
+    import time
+    newTime = time.time()
+    if lastTime is None:
+        lastTime = newTime
+    if lastTime == 0 or newTime - lastTime > s:
+        action()
+        return newTime
+    return lastTime

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import collections
 import copy
@@ -7,12 +7,14 @@ import json
 import os
 import re
 import subprocess
-from collections import defaultdict
-from datetime import datetime
+from collections import defaultdict, OrderedDict
+from datetime import datetime, timedelta, date
 from functools import partial
+from isodate import parse_duration, Duration
 
 from . import attr
 from . import config
+from . import constants
 from . import datablocks
 from . import markdown
 from .DefaultOrderedDict import DefaultOrderedDict
@@ -53,8 +55,8 @@ class MetadataManager:
         self.audience = []
         self.blockElements = []
         self.boilerplate = config.BoolSet(default=True)
-        self.canonicalURL = None
         self.canIUseURLs = []
+        self.canonicalURL = None
         self.complainAbout = config.BoolSet()
         self.customTextMacros = []
         self.customWarningText = []
@@ -67,13 +69,8 @@ class MetadataManager:
         self.displayShortname = None
         self.editors = []
         self.editorTerm = {"singular": "Editor", "plural": "Editors"}
+        self.expires = None
         self.favicon = None
-        self.trackingVectorClass = "tracking-vector"
-        self.trackingVectorImage = None
-        self.trackingVectorImageWidth = "46"
-        self.trackingVectorImageHeight = "64"
-        self.trackingVectorAltText = "(This is a tracking vector.)"
-        self.trackingVectorTitle = "There is a tracking vector here."
         self.forceCrossorigin = False
         self.group = None
         self.h1 = None
@@ -81,6 +78,7 @@ class MetadataManager:
         self.ignoredTerms = []
         self.ignoredVars = []
         self.includeCanIUsePanels = False
+        self.includeMdnPanels = False
         self.indent = 4
         self.inferCSSDfns = False
         self.informativeClasses = []
@@ -114,6 +112,12 @@ class MetadataManager:
         self.title = None
         self.toggleDiffs = False
         self.TR = None
+        self.trackingVectorAltText = "(This is a tracking vector.)"
+        self.trackingVectorClass = "tracking-vector"
+        self.trackingVectorImage = None
+        self.trackingVectorImageHeight = "64"
+        self.trackingVectorImageWidth = "46"
+        self.trackingVectorTitle = "There is a tracking vector here."
         self.translateIDs = defaultdict(list)
         self.translations = []
         self.useDfnPanels = True
@@ -130,7 +134,7 @@ class MetadataManager:
 
     def addData(self, key, val, lineNum=None):
         key = key.strip()
-        if isinstance(val, basestring):
+        if isinstance(val, str):
             if key in ["Abstract"]:
                 val = val.strip("\n")
             else:
@@ -169,6 +173,8 @@ class MetadataManager:
         if self.repository.type == "github" and "feedback-header" in self.boilerplate and "repository-issue-tracking" in self.boilerplate:
             self.issues.append(("GitHub", self.repository.formatIssueUrl()))
         self.status = config.canonicalizeStatus(self.rawStatus, self.group)
+
+        self.expires = canonicalizeExpiryDate(self.date, self.expires)
 
         # for TR document, defaults to TR
         # fallbacks to ED
@@ -272,21 +278,28 @@ class MetadataManager:
         elif self.noAbstract:
             macros["abstract"] = ""
             macros["abstractattr"] = ""
-        macros["year"] = unicode(self.date.year)
-        macros["date"] = unicode(self.date.strftime("{0} %B %Y".format(self.date.day)), encoding="utf-8")
-        macros["date-dmmy"] = unicode(self.date.strftime("{0} %B %Y".format(self.date.day)), encoding="utf-8") #same as plain 'date'
-        macros["cdate"] = unicode(self.date.strftime("%Y%m%d"), encoding="utf-8")
-        macros["isodate"] = unicode(self.date.strftime("%Y-%m-%d"), encoding="utf-8")
-        macros["date-my"] = unicode(self.date.strftime("%b %Y"), encoding="utf-8")
-        macros["date-mmy"] = unicode(self.date.strftime("%B %Y"), encoding="utf-8")
+        macros["year"] = self.date.year
+        macros["date"] = self.date.strftime("{0} %B %Y".format(self.date.day))
+        macros["date-dmmy"] = self.date.strftime("{0} %B %Y".format(self.date.day)) #same as plain 'date'
+        macros["cdate"] = self.date.strftime("%Y%m%d")
+        macros["isodate"] = self.date.strftime("%Y-%m-%d")
+        macros["date-my"] = self.date.strftime("%b %Y")
+        macros["date-mmy"] = self.date.strftime("%B %Y")
+        if isinstance(self.expires, date):
+            macros["expires"] = self.expires.strftime("{0} %B %Y".format(self.expires.day))
+            macros["expires-dmmy"] = self.expires.strftime("{0} %B %Y".format(self.expires.day)) #same as plain 'expires'
+            macros["cexpires"] = self.expires.strftime("%Y%m%d")
+            macros["isoexpires"] = self.expires.strftime("%Y-%m-%d")
+            macros["expires-my"] = self.expires.strftime("%b %Y")
+            macros["expires-mmy"] = self.expires.strftime("%B %Y")
         if self.deadline:
-            macros["deadline"] = unicode(self.deadline.strftime("{0} %B %Y".format(self.deadline.day)), encoding="utf-8")
-            macros["isodeadline"] = unicode(self.deadline.strftime("%Y-%m-%d"), encoding="utf-8")
+            macros["deadline"] = self.deadline.strftime("{0} %B %Y".format(self.deadline.day))
+            macros["isodeadline"] = self.deadline.strftime("%Y-%m-%d")
         if self.status in config.snapshotStatuses:
             macros["version"] = "https://www.w3.org/TR/{year}/{status}-{vshortname}-{cdate}/".format(**macros)
         elif self.ED:
             macros["version"] = self.ED
-        macros["annotations"] = config.testAnnotationURL
+        macros["annotations"] = constants.testAnnotationURL
         if doc and self.vshortname in doc.testSuites:
             macros["testsuite"] = doc.testSuites[self.vshortname]['vshortname']
         if self.warning and len(self.warning) >= 2:
@@ -333,6 +346,34 @@ def parseDate(key, val, lineNum):
         return None
 
 
+def parseDateOrDuration(key, val, lineNum):
+    if val == "now":
+        return datetime.utcnow().date()
+    if val == "never" or boolish(val) is False:
+        return None
+    try:
+        if val.startswith("P"):
+            return parse_duration(val)
+        return datetime.strptime(val, "%Y-%m-%d").date()
+    except:
+        die("The {0} field must be an ISO 8601 duration, a date in the format YYYY-MM-DD, now, never, false, no, n, or off. Got '{1}' instead.", key, val, lineNum=lineNum)
+        return None
+
+def canonicalizeExpiryDate(base, expires):
+    if expires is None:
+        return None
+    if isinstance(expires, timedelta):
+        return base + expires
+    if isinstance(expires, Duration):
+        return base + expires
+    if isinstance(expires, datetime):
+        return expires.date()
+    if isinstance(expires, date):
+        return expires
+    die("Unexpected expiry type: canonicalizeExpiryDate({0}, {1})", base, expires)
+    return None
+
+
 def parseLevel(key, val, lineNum):
     val = val.lower().strip()
     if val == "none":
@@ -349,6 +390,15 @@ def parseBoolean(key, val, lineNum):
     if b is None:
         die("The {0} field must be true/false, yes/no, y/n, or on/off. Got '{1}' instead.", key, val, lineNum=lineNum)
     return b
+
+
+def parseSoftBoolean(key, val, lineNum):
+    b = boolish(val)
+    if b is not None:
+        return b
+    if val.lower() in ["maybe", "if possible", "if needed"]:
+        return "maybe"
+    die(f"The {key} field must be boolish, or 'maybe'. Got '{val}' instead.", lineNum=lineNum)
 
 
 def boolish(val):
@@ -469,6 +519,10 @@ def parseCommaSeparated(key, val, lineNum):
     return [term.strip().lower() for term in val.split(',')]
 
 
+def parseIdList(key, val, lineNum):
+    return [term.strip() for term in val.split(',')]
+
+
 def parseLinkDefaults(key, val, lineNum):
     defaultSpecs = defaultdict(list)
     for default in val.split(","):
@@ -511,11 +565,11 @@ def parseRefStatus(key, val, lineNum):
     if val == "dated":
         # Legacy term that used to be allowed
         val == "snapshot"
-    if val in config.refStatus:
+    if val in constants.refStatus:
         return val
     else:
         die("'{0}' must be either 'current' or 'snapshot'. Got '{1}'", key, val, lineNum=lineNum)
-        return config.refStatus.current
+        return constants.refStatus.current
 
 
 def parseComplainAbout(key, val, lineNum):
@@ -694,7 +748,7 @@ def parseAudience(key, val, lineNum):
         return ["all"]
     elif len(values) >= 1:
         ret = []
-        namedAudiences = set(["CWG", "LWG", "EWG", "LEWG", "DIRECTION"])
+        namedAudiences = {"CWG", "LWG", "EWG", "LEWG", "DIRECTION"}
         pseudonymAudiences = {"Concurrency":"SG1", "TM":"SG5", "Numerics":"SG6", "Reflection":"SG7", "UB":"SG12", "HMI":"SG13", "Tooling":"SG15", "Unicode":"SG16", "EWGI":"SG17", "LEWG":"SG18"}
         for v in values:
             if v in namedAudiences:
@@ -817,7 +871,7 @@ def fromCommandLine(overrides):
 def fromJson(data, source=""):
     md = MetadataManager()
     try:
-        defaults = json.loads(data)
+        defaults = json.loads(data, object_pairs_hook=OrderedDict)
     except Exception as e:
         if data != "":
             if source == "computed-metadata":
@@ -826,7 +880,7 @@ def fromJson(data, source=""):
                 die("Error loading {1} JSON:\n{0}", str(e), source)
         return md
     for key,val in defaults.items():
-        if isinstance(val, basestring):
+        if isinstance(val, str):
             md.addData(key, val)
         elif isinstance(val, list):
             for indivVal in val:
@@ -849,7 +903,7 @@ def getSpecRepository(doc):
         try:
             os.chdir(source_dir)
             with open(os.devnull, "wb") as fnull:
-                remotes = subprocess.check_output(["git", "remote", "-v"], stderr=fnull)
+                remotes = str(subprocess.check_output(["git", "remote", "-v"], stderr=fnull), encoding="utf-8")
             os.chdir(old_dir)
             searches = [
               r"origin\tgit@github\.([\w.-]+):([\w-]+)/([\w-]+)\.git \(\w+\)",
@@ -979,6 +1033,7 @@ knownKeys = {
     "ED": Metadata("ED", "ED", joinValue, parseLiteral),
     "Editor": Metadata("Editor", "editors", joinList, parseEditor),
     "Editor Term": Metadata("Editor Term", "editorTerm", joinValue, parseEditorTerm),
+    "Expires": Metadata("Expires", "expires", joinValue, parseDateOrDuration),
     "Favicon": Metadata("Favicon", "favicon", joinValue, parseLiteral),
     "Force Crossorigin": Metadata("Force Crossorigin", "forceCrossorigin", joinValue, parseBoolean),
     "Former Editor": Metadata("Former Editor", "previousEditors", joinList, parseEditor),
@@ -988,6 +1043,7 @@ knownKeys = {
     "Ignored Terms": Metadata("Ignored Terms", "ignoredTerms", joinList, parseCommaSeparated),
     "Ignored Vars": Metadata("Ignored Vars", "ignoredVars", joinList, parseCommaSeparated),
     "Include Can I Use Panels": Metadata("Include Can I Use Panels", "includeCanIUsePanels", joinValue, parseBoolean),
+    "Include Mdn Panels": Metadata("Include Mdn Panels", "includeMdnPanels", joinValue, parseSoftBoolean),
     "Indent": Metadata("Indent", "indent", joinValue, parseInteger),
     "Infer Css Dfns": Metadata("Infer Css Dfns", "inferCSSDfns", joinValue, parseBoolean),
     "Informative Classes": Metadata("Informative Classes", "informativeClasses", joinList, parseCommaSeparated),
@@ -1014,7 +1070,7 @@ knownKeys = {
     "Previous Version": Metadata("Previous Version", "previousVersions", joinList, parseLiteralList),
     "Remove Multiple Links": Metadata("Remove Multiple Links", "removeMultipleLinks", joinValue, parseBoolean),
     "Repository": Metadata("Repository", "repository", joinValue, parseRepository),
-    "Required Ids": Metadata("Required Ids", "requiredIDs", joinList, parseCommaSeparated),
+    "Required Ids": Metadata("Required Ids", "requiredIDs", joinList, parseIdList),
     "Revision": Metadata("Revision", "level", joinValue, parseLevel),
     "Shortname": Metadata("Shortname", "displayShortname", joinValue, parseLiteral),
     "Slim Build Artifact": Metadata("Slim Build Artifact", "slimBuildArtifact", joinValue, parseBoolean),

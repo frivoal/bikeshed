@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import io
 import json
 import re
 import os
-import urllib2
+import urllib.error, urllib.parse
 from collections import defaultdict
 from contextlib import closing
 
 from .. import biblio
 from .. import config
+from .. import constants
 from ..htmlhelpers import *
-from ..apiclient.apiclient import apiclient
 from ..DefaultOrderedDict import DefaultOrderedDict
 from ..messages import *
 from ..Spec import Spec
@@ -36,14 +36,14 @@ def testNameForPath(path):
 def update(path, dryRun=False):
     return # early exit while working on this...
     say("Downloading backref data...")
-    config.quiet = float("inf")
+    constants.quiet = float("inf")
     if not dryRun:
         specs = defaultdict(dict)
         backrefs = defaultdict(lambda: defaultdict(list))
         for i,testPath in enumerate(findTestFiles()):
             if i > 1:
                 break
-            print i,testNameForPath(testPath)
+            print(i,testNameForPath(testPath))
             doc = Spec(inputFilename=testPath)
             doc.preprocess()
             if doc.md.ED:
@@ -55,7 +55,7 @@ def update(path, dryRun=False):
             referencingShortname = doc.md.vshortname
             for ref in processRefs(doc.externalRefsUsed):
                 _,_,referencedID = ref.url.partition("#")
-                referencedID = urllib2.unquote(referencedID)
+                referencedID = urllib.parse.unquote(referencedID)
                 referencedShortname = ref.spec
                 referencingLinks = findAll("[href='{0}']".format(ref.url), doc)
                 referencingIDs = [link.get("id") for link in referencingLinks if link.get("id")]
@@ -65,7 +65,7 @@ def update(path, dryRun=False):
                     "urls": referencingURLs
                 })
 
-    print config.printjson(backrefs)
+    print(config.printjson(backrefs))
 
 
 def processRefs(refs):
@@ -80,11 +80,11 @@ def processRefs(refs):
                     seenRefs.add(key)
 
 
-ignoredSpecs = set([
+ignoredSpecs = {
     "css-foo-1",
     "css-typed-om-2",
     "css-2015-0",
     "d0???-1",
     "svg-color-1",
     "{{repo}}-1"
-])
+}

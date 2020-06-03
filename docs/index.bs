@@ -37,218 +37,205 @@ Installing {#installing}
 If you use Bikeshed frequently in different environments, it may be helpful to run Bikeshed from a docker image
 as this avoids having to install Bikeshed's dependencies. In this case, skip directly down to [[#install-docker]].
 
+Using Bikeshed Without A Local Install {#install-no}
+----------------------------------------------------
+
 If you use Bikeshed infrequently,
 or are okay with requiring a network roundtrip every time you invoke Bikeshed,
 you probably want to use [the Bikeshed API instead](https://api.csswg.org/bikeshed/).
 In return, the API version is always up-to-date,
 so you don't have to remember to update things yourself.
+See [[#remote]] for options.
 
-If you want to run a local copy of Bikeshed rather than use the cgi version, it’s pretty easy to install.
+Installing The Right Py3 {#install-py3}
+---------------------------------------
 
-You need to install Python 2.7, PIP, and a few other support libraries before installing Bikeshed itself.
-Here is how to do this on [[#install-linux|Debian-based Linuxen]] (anything using `apt`),
-[[#install-osx|OS X]], [[#install-windows|Windows 7/8/10]],
-or the [[#install-termux|Termux terminal emulator]] for Android.
+Your OS should already be shipping with some version of Python 3.
+However, Bikeshed requires Python 3.7,
+and that's not always the version installed by default.
 
-If you already have [Virtualenv](https://virtualenv.pypa.io) set up, you can skip directly down to [[#install-common]].
+You can tell which you're running with:
 
-Note: For any of these installation methods,
-make sure that the directory PIP installs to
-(usually <code>/usr/local/bin/</code> by default,
-or perhaps <code>~/.local/bin/</code>)
-is in your <code>$PATH</code> variable
-(or equivalent for your platform),
-or else things'll get confusing.
-
-Linux steps {#install-linux}
-----------------------------
-
-```
-sudo apt-get install python2.7 python-dev python-pip python-wheel libxslt1-dev libxml2-dev
+```bash
+python3 --version
 ```
 
-The `apt-get` command works on Debian-based systems like Ubuntu; if you work on some other type of system, and can figure out how to get things working on your own, let me know and I'll add instructions for your system.
+If it reports 3.7 or later, you're fine.
+If it gives 3.5, 3.6, or some lesser version,
+you'll need to install 3.7.
+This can be a little complicated if you do it directly
+(building from source?),
+but luckily `pyenv` is now a mature and easy way to do this.
 
-Then, we'll need to install lxml and Pygments.
+### Installing Pyenv ### {#install-pyenv}
 
-```
-sudo pip install pygments
-sudo pip install lxml
-```
+<a href="https://github.com/pyenv/pyenv#installation">https://github.com/pyenv/pyenv#installation</a> gives instructions for installing pyenv on various environments.
+It also links to the auto-installer, which can make things even easier.
+Windows users have slightly different instructions,
+but it links to a windows fork as well.
 
-**Important**: If this command reports that you already have lxml, instead run:
+Note that the final install step currently installs 3.7.8;
+that's fine, go ahead and follow it.
 
-```
-sudo pip install lxml --upgrade
-```
+If you know your way around pyenv already,
+feel free to do what you're used to here.
+Otherwise, it's usually easiest to set up 3.7 as your "default" Python:
 
-That'll spew a lot of console trash, but don't worry about it.
-
-In some installations you'll need to also upgrade `setuptools` for `html5lib`'s entertainment:
-
-```
-sudo pip install lxml setuptools --upgrade
-```
-
-From here, you can proceed to [[#install-common]].
-
-
-OS X steps {#install-osx}
--------------------------
-
-Note: If you're on a relatively modern Mac you should be able to proceed directly to [[#install-common]].
-
-These instructions assume that you have [Mac Ports](https://www.macports.org/) or [Homebrew](https://brew.sh/) installed. If you successfully install Bikeshed using some other method, please contribute to this documentation.
-
-
-### Mac ports ### {#install-macports}
-
-First, get the right packages installed onto your system:
-
-```
-sudo port install python27 py27-pip py27-lxml py27-html5lib py27-cssselect py27-libxslt py27-libxml2 py27-pygments
+```bash
+pyenv versions
 ```
 
-Then, activate the python version you just installed as the one the system should use:
+will list what versions exist, and then
 
-```
-sudo port select --set python python27
-```
-
-(If you get `ImportError: No module named six` when you first run Bikeshed, additionally run `sudo port install py27-six`.)
-
-
-### Homebrew ### {#install-homebrew}
-
-Install the Homebrew version of Python and Pip:
-
-```
-brew install python@2
+```bash
+pyenv global 3.7.0
 ```
 
-Install the XCode command-line tools:
+will set 3.7.0 as your "global" version, used by default.
+(Substitute in whatever the name of the version you saw in `versions` was.)
 
+Installing Bikeshed Itself {#install-final}
+-------------------------------------------
+
+Once your environment is set up for Python 3.7,
+installation is a breeze.
+Run the following command:
+
+```bash
+pip3 install bikeshed && bikeshed update
 ```
-xcode-select --install
-```
 
-Install or update lxml and Pygments.
+When this is completed, Bikeshed should be installed,
+and the `bikeshed` command should work in your shell.
 
-```
-pip install pygments lxml --upgrade
-```
+Note: Depending on your system and python/pip install,
+you might instead need to run `pip`, `python -m pip`, or `python3 -m pip`,
+instead of the plain `pip`.
 
-That'll spew a lot of console trash, but don't worry about it.
+Note: If you'd prefer a user-local install rather than a global,
+add a `--user` flag to the `pip3 install` invocation.
+If you haven't done a user-local install before,
+`pip` will warn you about having to add new things to your `$PATH`
+before `bikeshed` becomes available to use as a command.
 
-### All Macs ### {#install-macs-common}
+Note: If you're on a Mac,
+`bikeshed update` might fail with some errors about certificates.
+This is a known issue with the version of Python 3.7 shipped with XCode,
+which might be the default on your system.
+To fix this, install Python 3.7 with [Brew](https://brew.sh/) instead.
 
-After doing the previous commands specific to your subsystem,
-you can proceed to [[#install-common]].
+### Installing Bikeshed for Development ### {#install-dev}
 
-<div class=advisement>
-	Some people on Macs have reported problems with the `six` library
-	upon first running Bikeshed.
+If you're installing Bikeshed so you can work on it,
+or want to ensure you have the bleeding-edge tip-of-tree version,
+the instructions are just a tiny bit more complex.
 
-	If you get the error <nobr>`ImportError: cannot import name viewkeys`</nobr>
-	when you try to run Bikeshed the first time,
-	run <nobr>`sudo pip install --ignore-installed six`</nobr>
-	to upgrade it to the latest version.
-</div>
+First, clone the Bikeshed repository:
 
-
-Windows steps {#install-windows}
---------------------------------
-
-Tested on Windows 7, 8/8.1, and 10.
-
-1. Install the latest [Python 2.7](https://www.python.org/downloads/release/python-2713/).
-2. Run the following in an elevated command prompt
-	(change the path if your location is different)
-
-	```
-	setx /m PATH "%PATH%;C:\Python27;C:\Python27\Scripts"
-	```
-3. If using Python 2.7.8 or older, install \[PIP](https://pip.pypa.io/en/latest/installing.html)
-	by saving [get-pip.py](https://bootstrap.pypa.io/get-pip.py)
-	and just double clicking the file.
-
-From here, you can proceed to [[#install-common]].
-
-
-Android + Termux steps {#install-termux}
-----------------------------------------
-
-This is how to set up bikeshed on your android phone or tablet using <a href="https://termux.com/">Termux</a>.
-
-1. Install Termux from <a href="https://play.google.com/store/apps/details?id=com.termux">Google Play</a> or <a href="https://f-droid.org/repository/browse/?fdid=com.termux">F-Droid</a>.
-2. Install python, git, a c compiler, and the native dependencies:
-	```
-	apt install python2 python2-dev clang libxml2-dev libxslt-dev git
-	```
-3. Install the Python dependencies:
-	```
-	pip2 install pygments lxml --upgrade
-	```
-
-From here, you can proceed to [[#install-common]].
-
-
-Common steps {#install-common}
-------------------------------
-
-With the dependencies in place,
-you can now install the Bikeshed repository itself.
-Run the following in your favorite command line:
-
-```
+```bash
 git clone https://github.com/tabatkins/bikeshed.git
 ```
 
-(This’ll download bikeshed to a `bikeshed` folder,
-created wherever you’re currently at.
-If you think you might want to commit back to Bikeshed,
-instead download it over SSH.
-I won’t explain how to do that here.)
+Then navigate to that folder
+(by default, it'll be a folder called "bikeshed"
+in the current folder you're in)
+and run:
 
-Finally, depending on your environment, run:
+```bash
+pip3 install -e .
+```
 
-: In a Virtualenv environment:
-::
-    ```
-    pip install --editable /path/to/cloned/bikeshed
-    bikeshed update
-    ```
+This will spam your console with a bunch of install progress.
+When it successfully completes,
+the `bikeshed` module should be globally available for import in Python,
+and a `bikeshed` command should now work in your shell.
 
-: For Linux/OSX (Omit the `sudo` for OSX under Homebrew):
-::
-    ```
-    sudo pip install --editable /path/to/cloned/bikeshed
-    bikeshed update
-    ```
+Finally,
+run the following command to update your data files to the latest version:
 
-: On Windows:
-::
-    ```
-    python -m pip install --editable /path/to/cloned/bikeshed
-    bikeshed update
-    ```
+```bash
+bikeshed update
+```
 
-: On Termux:
-::
-    ```
-    pip2 install --editable /path/to/cloned/bikeshed
-    bikeshed update
-    ```
+<div class=advisement>
+	These install instructions are new,
+	and it's possible they may not work on all systems.
+	If something doesn't work for you,
+	please <a href="https://github.com/tabatkins/bikeshed/issues/new">open an issue</a>
+	and let me know what system you're on,
+	what you've done so far,
+	and what errors you've gotten.
+</div>
 
-This’ll install Bikeshed,
-making it available to your Python environment as the `bikeshed` package,
-automatically add a `bikeshed` command to your path,
-and then update your data files to the latest versions.
+### Installing With Pipenv ### {#install-pipenv}
 
-(If anything doesn’t work in here, let me know and I’ll fix it.
-These instructions have worked for a lot of people on all OSes,
-but it's possible that you'll run into a new error,
-because computers are terrible.)
+If you're a user of `pipenv`,
+Bikeshed's folder contains a `Pipfile` and `Pipfile.lock` for you.
+
+Follow the same instructions as above,
+but instead of running `pip3 install`,
+run:
+
+```bash
+pipenv install -e .
+pipenv run bikeshed update
+```
+
+This will *not* install a `bikeshed` command by default;
+instead, you run Bikeshed with `pipenv run bikeshed`.
+If you'd like `bikeshed` to work by itself,
+either start a pipenv shell with `pipenv shell`,
+or add an alias to your machine like:
+
+```bash
+bikeshed=pipenv run bikeshed
+```
+
+
+Updating Bikeshed {#updating-bikeshed}
+--------------------------------------
+
+To update bikeshed to its latest version at any time,
+just run:
+
+```
+pip3 install --upgrade bikeshed && bikeshed update
+```
+
+This’ll pull the latest version of Bikeshed,
+and ensure that you’re looking at the latest version of the data files,
+rather than whatever stale version is currently sitting in the repo.
+
+Note: If you did a user-local install up above,
+by passing the `--user` flag to `pip3 install`,
+pass it here as well to update your local copy;
+otherwise this command will install it globally.
+
+Note: If you did an "editable" install up above,
+to update it you just run the install command again;
+no `--upgrade` flag required.
+
+
+Travis CI steps {#travis-ci}
+----------------------------
+
+To use bikeshed on [Travis CI](https://travis-ci.org/)'s github integration, you'll need the following `.travis.yml` commands:
+
+```
+sudo: false
+language: python
+python:
+  - "3.7"
+install:
+  - pip install bikeshed
+  - bikeshed update
+script:
+  # Invoke bikeshed here, at your own leisure. E.g.:
+  - bikeshed spec
+```
+
+[Raymond Toy has written a very thoro guide on the full setup you need to auto-build and -publish the generated files to GitHub via Travis, so you only need to check in the source files themselves.](https://github.com/rtoy/auto-deploy-spec)
+
 
 Building a Bikeshed docker image {#install-docker}
 --------------------------------------------------
@@ -301,42 +288,6 @@ Building a Bikeshed docker image {#install-docker}
 
     See [[#cli-docker]]
 
-
-Updating Bikeshed {#updating-bikeshed}
---------------------------------------
-
-To update bikeshed to its latest version at any time,
-just enter Bikeshed’s folder and run:
-
-```
-git pull --rebase
-bikeshed update
-```
-
-This’ll pull the latest version of Bikeshed,
-and ensure that you’re looking at the latest version of the data files,
-rather than whatever stale version is currently sitting in the repo.
-
-Travis CI steps {#travis-ci}
-----------------------------
-
-To use bikeshed on [Travis CI](https://travis-ci.org/)'s github integration, you'll need the following `.travis.yml` commands:
-
-```
-sudo: false
-language: python
-python:
-  - "2.7"
-install:
-  - git clone https://github.com/tabatkins/bikeshed.git
-  - pip install --editable bikeshed
-  - bikeshed update
-script:
-  # Invoke bikeshed here, at your own leisure. E.g.:
-  - bikeshed spec
-```
-
-[Raymond Toy has written a very thoro guide on the full setup you need to auto-build and -publish the generated files to GitHub via Travis, so you only need to check in the source files themselves.](https://github.com/rtoy/auto-deploy-spec)
 
 <!--
  ██████  ██     ██ ████████  ██
@@ -1015,6 +966,19 @@ There are several additional optional keys:
 	* <dfn>Ignored Terms</dfn> accepts a comma-separated list of terms and makes Bikeshed not emit warnings or errors when attempting to autolink those terms.  Use this to quiet spurious preprocessor warnings caused by you inventing terms (for example, the Variables spec invents custom properties like 'var-foo'), or as a temporary patch when the spec you want to link to doesn't set up its definitions correctly.
 	* <dfn>Date</dfn> must contain a date in YYYY-MM-DD format, which is used instead of today's date for all the date-related stuff in the spec. Alternately it can contain the string `now`, which explicitly indicates a date of precisely when the output is generated.
 	* <dfn>Deadline</dfn> is also a YYYY-MM-DD date, which is used for things like the LCWD Status section, to indicate deadlines.
+	* <dfn>Expires</dfn> is also a YYYY-MM-DD date,
+		or can be the string `now` to indicate today's date,
+		or can be an "ISO Duration" like `P1Y` to indicate "+1 year"
+		from the [=Date=] metadata
+		(or the spec's generation date if that's not specified),
+		and indicates when the document should be considered "expired"--
+		before the expiration date an (initially closed) warning about the upcoming expiration is automatically included in the document;
+		afterwards the warning defaults to being open and annoying.
+
+		It can also take a [=boolish=] false value or `never` to indicate it never expires;
+		this is just the default value,
+		so these values are only useful for turning off a default expiration
+		established by your default metadata.
 	* <dfn>Test Suite</dfn> must contain a link to the test suite (like <code>https://test.csswg.org/suites/css-flexbox-1_dev/nightly-unstable/</code>).
 
 		Note: This merely displays a "Test Suite" item in the spec's header-list,
@@ -1150,6 +1114,24 @@ There are several additional optional keys:
 		even when it's not necessary to disambiguate things,
 		so it's off by default.
 	* <dfn>Max ToC Depth</dfn> specifies the maximum depth you want the ToC to generate to. It can be the value "none", meaning generate the ToC normally, or an integer between 1 and 5. It defaults to "none".
+	* <dfn>Include MDN Panels</dfn> is a <a>soft boolish</a> that specifies whether to include \[MDN](https://developer.mozilla.org/en-US/docs/Web) panels or not.
+		If it's turned on, MDN panels will be added automatically in output,
+		positioned to line up with the elements which define the features the panels annotate.
+		Each MDN panel includes a hyperlink to the MDN article for the feature it annotates,
+		as well as browser-support details for the feature
+		(similar to what's shown in the panels added when [=Include Can I Use Panels=] is enabled).
+
+		Because this examines MDN links for the IDs to use,
+		no configuration is necessary beyond turning the feature on;
+		the panels will automatically be added to the definitions or headings
+		with the associated IDs.
+
+		If your spec is not *yet* in MDN,
+		but you'd like the panels to be added when it shows up,
+		you can pass one of the "maybe" values of a [=soft boolish=]
+		to allow it to silently upgrade when possible;
+		otherwise, if directly turned on,
+		it will emit a fatal error if it can't find your spec.
 	* Several keys relate to the [Can I Use](https://caniuse.com/) project:
 		* <dfn>Include Can I Use Panels</dfn> is a <a>boolish</a> that specifies whether to include [Can I Use](https://caniuse.com/) usage-data panels or not. If it's turned on, elements can take a `caniuse="featureID"` attribute, where the `featureID` is the value specified in the url like `https://caniuse.com/#feat=FEATUREIDHERE`, and the panel will be positioned to line up with that element.
 			(When possible, put this on the corresponding <{dfn}>,
@@ -1221,9 +1203,15 @@ There are several additional optional keys:
 	* <dfn>Tracking Vector Title</dfn> is the title for the inline SVG or external image.
 </ul>
 
-Note: A <dfn>boolish</dfn> value is a string representing a boolean value (true or false).
-The string "yes", "on", "true", and "y" all represent true values,
-while the strings "no", "off", "false", and "n" all represent false values.
+<div class=note>
+	A <dfn>boolish</dfn> value is a string representing a boolean value (true or false).
+	The string "yes", "on", "true", and "y" all represent true values,
+	while the strings "no", "off", "false", and "n" all represent false values.
+
+	A <dfn>soft boolish</dfn> value is either a [=boolish=] value,
+	or one of the strings "maybe", "if possible", or "if needed",
+	indicating an intermediate intention between something being turned on and off.
+</div>
 
 You can also provide custom keys with whatever values you want,
 by prefixing the key with `!`,

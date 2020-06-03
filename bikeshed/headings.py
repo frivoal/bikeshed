@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 from .config import simplifyText
 from .htmlhelpers import *
 from .messages import *
@@ -90,7 +90,7 @@ def determineHeadingLevels(doc, headings):
             headerLevel[i] = 0
 
     def printLevel():
-        return '.'.join(unicode(x) for x in headerLevel if x > 0)
+        return '.'.join(str(x) for x in headerLevel if x > 0)
 
     skipLevel = float('inf')
     for header in headings:
@@ -102,7 +102,7 @@ def determineHeadingLevels(doc, headings):
             del header.attrib['data-level']
 
         # If we encounter a no-num or an appendix, don't number it or any in the same section.
-        if hasClass(header, "no-num") or textContent(header)[0:9].lower() == "appendix ":
+        if hasClass(header, "no-num") or textContent(header).lstrip()[0:9].lower() == "appendix ":
             skipLevel = min(level, skipLevel)
             continue
         if skipLevel < level:

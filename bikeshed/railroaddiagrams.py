@@ -1,4 +1,6 @@
 # coding=utf-8
+import math
+import re
 
 # Display constants
 VERTICAL_SEPARATION = 8
@@ -11,9 +13,13 @@ DEBUG=False
 # Assume a monospace font with each char .5em wide, and the em is 16px
 CHARACTER_ADVANCE = 8
 
-def e(text):
-    import re
-    return re.sub(r"[*_\`\[\]<&]", lambda c: "&#{0};".format(ord(c.group(0))), unicode(text))
+def escapeAttr(val):
+    if isinstance(val, str):
+        return val.replace('&', '&amp;').replace("'", '&apos;').replace('"', '&quot;')
+    return f"{val:g}"
+
+def escapeHtml(val):
+    return escapeAttr(val).replace('<', '&lt;')
 
 def determineGaps(outer, inner):
     diff = outer - inner
@@ -28,6 +34,7 @@ def doubleenumerate(seq):
     length = len(list(seq))
     for i,item in enumerate(seq):
         yield i, i-length, item
+
 
 
 
@@ -50,30 +57,30 @@ class DiagramItem(object):
         return self
 
     def writeSvg(self, write):
-        write(u'<{0}'.format(self.name))
+        write(f'<{self.name}')
         for name, value in sorted(self.attrs.items()):
-            write(u' {0}="{1}"'.format(name, e(value)))
-        write(u'>')
+            write(f' {name}="{escapeAttr(value)}"')
+        write('>')
         if self.name in ["g", "svg"]:
-            write(u'\n')
+            write('\n')
         for child in self.children:
             if isinstance(child, DiagramItem):
                 child.writeSvg(write)
             else:
-                write(e(child))
-        write(u'</{0}>'.format(self.name))
+                write(escapeHtml(child))
+        write(f'</{self.name}>')
 
 
 class Path(DiagramItem):
     def __init__(self, x, y):
-        DiagramItem.__init__(self, 'path', {'d': 'M%s %s' % (x, y)})
+        DiagramItem.__init__(self, 'path', {'d': f'M{x:g} {y:g}'})
 
     def m(self, x, y):
-        self.attrs['d'] += 'm{0} {1}'.format(x,y)
+        self.attrs['d'] += f'm{x:g} {y:g}'
         return self
 
     def h(self, val):
-        self.attrs['d'] += 'h{0}'.format(val)
+        self.attrs['d'] += f'h{val:g}'
         return self
 
     def right(self, val):
@@ -83,7 +90,7 @@ class Path(DiagramItem):
         return self.h(-max(0, val))
 
     def v(self, val):
-        self.attrs['d'] += 'v{0}'.format(val)
+        self.attrs['d'] += f'v{val:g}'
         return self
 
     def down(self, val):
@@ -100,7 +107,7 @@ class Path(DiagramItem):
         if sweep[0] == 's' or sweep[1] == 'n':
             y *= -1
         cw = 1 if sweep == 'ne' or sweep == 'es' or sweep == 'sw' or sweep == 'wn' else 0
-        self.attrs['d'] += 'a{0} {0} 0 0 {1} {2} {3}'.format(ARC_RADIUS, cw, x, y)
+        self.attrs['d'] += f'a{ARC_RADIUS:g} {ARC_RADIUS:g} 0 0 {cw:g} {x:g} {y:g}'
         return self
 
 
@@ -156,9 +163,11 @@ class Diagram(DiagramItem):
             if item.needsSpace:
                 Path(x, y).h(10).addTo(g)
                 x += 10
-        self.attrs['width'] = self.width + paddingLeft + paddingRight
-        self.attrs['height'] = self.up + self.height + self.down + paddingTop + paddingBottom
-        self.attrs['viewBox'] = "0 0 {width} {height}".format(**self.attrs)
+        vbwidth = self.width + paddingLeft + paddingRight
+        vbheight = self.up + self.height + self.down + paddingTop + paddingBottom
+        self.attrs['width'] = vbwidth
+        self.attrs['height'] = vbheight
+        self.attrs['viewBox'] = f"0 0 {vbwidth:g} {vbheight:g}"
         g.addTo(self)
         self.formatted = True
         return self
@@ -210,7 +219,7 @@ class Sequence(DiagramItem):
         if self.items[-1].needsSpace:
             self.width -= 10
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "sequence"
 
     def format(self, x, y, width):
@@ -250,7 +259,7 @@ class Stack(DiagramItem):
             if i < last:
                 self.height += max(ARC_RADIUS*2, item.down + VERTICAL_SEPARATION)
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "stack"
 
     def format(self, x, y, width):
@@ -310,7 +319,7 @@ class OptionalSequence(DiagramItem):
             else:
                 self.width += ARC_RADIUS*2 + max(itemWidth, ARC_RADIUS) + ARC_RADIUS
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "optseq"
 
     def format(self, x, y, width):
@@ -414,7 +423,7 @@ class Choice(DiagramItem):
                 self.down += max(arcs, item.up + VERTICAL_SEPARATION + self.items[i-1].down + self.items[i-1].height)
         self.down -= self.items[default].height # already counted in self.height
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "choice"
 
     def format(self, x, y, width):
@@ -504,7 +513,7 @@ class MultipleChoice(DiagramItem):
                 self.down += max(minimum, item.up + VERTICAL_SEPARATION + self.items[i-1].down + self.items[i-1].height)
         self.down -= self.items[default].height # already counted in self.height
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "multiplechoice"
 
     def format(self, x, y, width):
@@ -577,7 +586,7 @@ class MultipleChoice(DiagramItem):
         text = DiagramItem('g', attrs={"class": "diagram-text"}).addTo(self)
         DiagramItem('title', text="take one or more branches, once each, in any order" if self.type=="any" else "take all branches, once each, in any order").addTo(text)
         DiagramItem('path', attrs={
-            "d": "M {x} {y} h -26 a 4 4 0 0 0 -4 4 v 12 a 4 4 0 0 0 4 4 h 26 z".format(x=x+30, y=y-10),
+            "d": f"M {x+30:g} {y-10:g} h -26 a 4 4 0 0 0 -4 4 v 12 a 4 4 0 0 0 4 4 h 26 z",
             "class": "diagram-text"
             }).addTo(text)
         DiagramItem('text', text="1+" if self.type=="any" else "all", attrs={
@@ -586,10 +595,10 @@ class MultipleChoice(DiagramItem):
             "class": "diagram-text"
             }).addTo(text)
         DiagramItem('path', attrs={
-            "d": "M {x} {y} h 16 a 4 4 0 0 1 4 4 v 12 a 4 4 0 0 1 -4 4 h -16 z".format(x=x+self.width-20, y=y-10),
+            "d": f"M {x+self.width-20:g} {y-10:g} h 16 a 4 4 0 0 1 4 4 v 12 a 4 4 0 0 1 -4 4 h -16 z",
             "class": "diagram-text"
             }).addTo(text)
-        DiagramItem('text', text=u"↺", attrs={
+        DiagramItem('text', text="↺", attrs={
             "x": x + self.width - 10,
             "y": y + 4,
             "class": "diagram-arrow"
@@ -615,7 +624,7 @@ class OneOrMore(DiagramItem):
             self.item.down + VERTICAL_SEPARATION + self.rep.up + self.rep.height + self.rep.down)
         self.needsSpace = True
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "oneormore"
 
     def format(self, x, y, width):
@@ -655,14 +664,14 @@ class Start(DiagramItem):
         self.down = 10
         self.type = type
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "start"
 
     def format(self, x, y, _width):
         if self.type == "simple":
-            self.attrs['d'] = 'M {0} {1} v 20 m 10 -20 v 20 m -10 -10 h 20.5'.format(x, y - 10)
+            self.attrs['d'] = f'M {x:g} {y-10:g} v 20 m 10 -20 v 20 m -10 -10 h 20.5'
         elif self.type == "complex":
-            self.attrs['d'] = 'M {0} {1} v 20 m 0 -10 h 20.5'
+            self.attrs['d'] = f'M {x:g} {y-10:g} v 20 m 0 -10 h 20.5'
         return self
 
 
@@ -674,14 +683,14 @@ class End(DiagramItem):
         self.down = 10
         self.type = type
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "end"
 
     def format(self, x, y, _width):
         if self.type == "simple":
-            self.attrs['d'] = 'M {0} {1} h 20 m -10 -10 v 20 m 10 -20 v 20'.format(x, y)
+            self.attrs['d'] = f'M {x} {y} h 20 m -10 -10 v 20 m 10 -20 v 20'
         elif self.type == "complex":
-            self.attrs['d'] = 'M {0} {1} h 20 m 0 -10 v 20'
+            self.attrs['d'] = f'M {x} {y} h 20 m 0 -10 v 20'
         return self
 
 
@@ -695,7 +704,7 @@ class Terminal(DiagramItem):
         self.down = 11
         self.needsSpace = True
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "terminal"
 
     def format(self, x, y, width):
@@ -726,7 +735,7 @@ class NonTerminal(DiagramItem):
         self.down = 11
         self.needsSpace = True
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "non-terminal"
 
     def format(self, x, y, width):
@@ -757,7 +766,7 @@ class Comment(DiagramItem):
         self.down = 11
         self.needsSpace = True
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "comment"
 
     def format(self, x, y, width):
@@ -783,7 +792,7 @@ class Skip(DiagramItem):
         self.up = 0
         self.down = 0
         if DEBUG:
-            self.attrs['data-updown'] = "{0} {1} {2}".format(self.up, self.height, self.down)
+            self.attrs['data-updown'] = f"{self.up:g} {self.height:g} {self.down:g}"
             self.attrs['data-type'] = "skip"
 
     def format(self, x, y, width):
@@ -793,7 +802,7 @@ class Skip(DiagramItem):
 
 if __name__ == '__main__':
     def add(name, diagram):
-        sys.stdout.write('<h1>{0}</h1>\n'.format(e(name)))
+        sys.stdout.write(f'<h1>{name}</h1>\n')
         diagram.writeSvg(sys.stdout.write)
         sys.stdout.write('\n')
 

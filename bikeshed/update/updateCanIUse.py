@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import io
 import json
 import os
-import urllib2
+import requests
 from collections import OrderedDict
-from contextlib import closing
 
 from ..messages import *
 
@@ -13,14 +12,13 @@ from ..messages import *
 def update(path, dryRun=False):
     say("Downloading Can I Use data...")
     try:
-        with closing(urllib2.urlopen("https://raw.githubusercontent.com/Fyrd/caniuse/master/fulldata-json/data-2.0.json")) as fh:
-            jsonString = fh.read()
+        response = requests.get("https://raw.githubusercontent.com/Fyrd/caniuse/master/fulldata-json/data-2.0.json")
     except Exception as e:
         die("Couldn't download the Can I Use data.\n{0}", e)
         return
 
     try:
-        data = json.loads(unicode(jsonString), encoding="utf-8", object_pairs_hook=OrderedDict)
+        data = response.json(encoding="utf-8", object_pairs_hook=OrderedDict)
     except Exception as e:
         die("The Can I Use data wasn't valid JSON for some reason. Try downloading again?\n{0}", e)
         return
@@ -91,13 +89,13 @@ def update(path, dryRun=False):
             p = os.path.join(path, "caniuse", "data.json")
             writtenPaths.add(p)
             with io.open(p, 'w', encoding="utf-8") as fh:
-                fh.write(unicode(json.dumps(basicData, indent=1, ensure_ascii=False, sort_keys=True)))
+                fh.write(json.dumps(basicData, indent=1, ensure_ascii=False, sort_keys=True))
 
             for featureName, feature in featureData.items():
                 p = os.path.join(path, "caniuse", "feature-{0}.json".format(featureName))
                 writtenPaths.add(p)
                 with io.open(p, 'w', encoding='utf-8') as fh:
-                    fh.write(unicode(json.dumps(feature, indent=1, ensure_ascii=False, sort_keys=True)))
+                    fh.write(json.dumps(feature, indent=1, ensure_ascii=False, sort_keys=True))
         except Exception as e:
             die("Couldn't save Can I Use database to disk.\n{0}", e)
             return

@@ -1,41 +1,34 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
+import certifi
 import io
 import json
 import re
+import retrying
 import os
-import urllib2
 from collections import defaultdict
 from contextlib import closing
+from json_home_client import Client as APIClient
 
 from .. import config
-from ..apiclient.apiclient import apiclient
 from ..messages import *
 
 
-anchorDataContentTypes = ["application/json", "application/vnd.csswg.shepherd.v1+json"]
-
 def update(path, dryRun=False):
-    try:
-        say("Downloading anchor data...")
-        shepherd = apiclient.APIClient("https://api.csswg.org/shepherd/", version="vnd.csswg.shepherd.v1")
-        res = shepherd.get("specifications", anchors=True, draft=True)
-        # http://api.csswg.org/shepherd/spec/?spec=css-flexbox-1&anchors&draft, for manual looking
-        if ((not res) or (406 == res.status)):
-            die("Either this version of the anchor-data API is no longer supported, or (more likely) there was a transient network error. Try again in a little while, and/or update Bikeshed. If the error persists, please report it on GitHub.")
-            return
-        if res.contentType not in anchorDataContentTypes:
-            die("Unrecognized anchor-data content-type '{0}'.", res.contentType)
-            return
-        rawSpecData = res.data
-    except Exception as e:
-        die("Couldn't download anchor data.  Error was:\n{0}", str(e))
+    say("Downloading anchor data...")
+    shepherd = APIClient("https://api.csswg.org/shepherd/", version="vnd.csswg.shepherd.v1", ca_cert_path=certifi.where())
+    rawSpecData = dataFromApi(shepherd, "specifications", draft=True)
+    if not rawSpecData:
         return
 
     specs = dict()
     anchors = defaultdict(list)
     headings = defaultdict(dict)
-    for rawSpec in rawSpecData.values():
+    lastMsgTime = 0
+    for i,rawSpec in enumerate(rawSpecData.values(), 1):
+        lastMsgTime = config.doEvery(s=5, lastTime=lastMsgTime,
+            action=lambda:say(f"Downloading data for spec {i}/{len(rawSpecData)}..."))
+        rawSpec = dataFromApi(shepherd, 'specifications', draft=True, anchors=True, spec=rawSpec['name'])
         spec = genSpec(rawSpec)
         specs[spec['vshortname']] = spec
         specHeadings = headings[spec['vshortname']]
@@ -71,7 +64,7 @@ def update(path, dryRun=False):
             p = os.path.join(path, "specs.json")
             writtenPaths.add(p)
             with io.open(p, 'w', encoding="utf-8") as f:
-                f.write(unicode(json.dumps(specs, ensure_ascii=False, indent=2, sort_keys=True)))
+                f.write(json.dumps(specs, ensure_ascii=False, indent=2, sort_keys=True))
         except Exception as e:
             die("Couldn't save spec database to disk.\n{0}", e)
             return
@@ -80,7 +73,7 @@ def update(path, dryRun=False):
                 p = os.path.join(path, "headings", "headings-{0}.json".format(spec))
                 writtenPaths.add(p)
                 with io.open(p, 'w', encoding="utf-8") as f:
-                    f.write(unicode(json.dumps(specHeadings, ensure_ascii=False, indent=2, sort_keys=True)))
+                    f.write(json.dumps(specHeadings, ensure_ascii=False, indent=2, sort_keys=True))
         except Exception as e:
             die("Couldn't save headings database to disk.\n{0}", e)
             return
@@ -93,7 +86,7 @@ def update(path, dryRun=False):
             p = os.path.join(path, "methods.json")
             writtenPaths.add(p)
             with io.open(p, 'w', encoding="utf-8") as f:
-                f.write(unicode(json.dumps(methods, ensure_ascii=False, indent=2, sort_keys=True)))
+                f.write(json.dumps(methods, ensure_ascii=False, indent=2, sort_keys=True))
         except Exception as e:
             die("Couldn't save methods database to disk.\n{0}", e)
             return
@@ -101,13 +94,38 @@ def update(path, dryRun=False):
             p = os.path.join(path, "fors.json")
             writtenPaths.add(p)
             with io.open(p, 'w', encoding="utf-8") as f:
-                f.write(unicode(json.dumps(fors, ensure_ascii=False, indent=2, sort_keys=True)))
+                f.write(json.dumps(fors, ensure_ascii=False, indent=2, sort_keys=True))
         except Exception as e:
             die("Couldn't save fors database to disk.\n{0}", e)
             return
 
     say("Success!")
     return writtenPaths
+
+
+@retrying.retry(
+    stop_max_attempt_number=3,
+    wait_fixed=1000,
+    # don't catch Ctrl-D, etc
+    retry_on_exception=lambda x:isinstance(x, Exception))
+def dataFromApi(api, *args, **kwargs):
+    anchorDataContentTypes = [
+        "application/json",
+        "application/vnd.csswg.shepherd.v1+json",
+        ]
+    res = api.get(*args, **kwargs)
+    if not res:
+        raise Exception("Unknown error fetching anchor data. This might be transient; try again in a few minutes, and if it's still broken, please report it on GitHub.")
+    data = res.data
+    if res.status_code == 406:
+        raise Exception("This version of the anchor-data API is no longer supported. Try updating Bikeshed. If the error persists, please report it on GitHub.")
+    if res.content_type not in anchorDataContentTypes:
+        raise Exception("Unrecognized anchor-data content-type '{0}'.", res.contentType)
+    if res.status_code >= 300:
+        raise Exception(f"Unknown error fetching anchor data; got status {res.status_code} and bytes:\n{data.decode('utf-8')}")
+    if isinstance(data, bytes):
+        raise Exception(f"Didn't get expected JSON data. Got:\n{data.decode('utf-8')}")
+    return data
 
 
 def linearizeAnchorTree(multiTree, list=None):
@@ -183,12 +201,12 @@ def fixupAnchor(anchor):
     anchor['linking_text'] = linkingTexts
 
     # Normalize whitespace to a single space
-    for k,v in anchor.items():
-        if isinstance(v, basestring):
+    for k,v in list(anchor.items()):
+        if isinstance(v, str):
             anchor[k] = re.sub(r"\s+", " ", v.strip())
         elif isinstance(v, list):
             for k1, v1 in enumerate(v):
-                if isinstance(v1, basestring):
+                if isinstance(v1, str):
                     anchor[k][k1] = re.sub(r"\s+", " ", v1.strip())
     return anchor
 
@@ -241,7 +259,7 @@ def cleanSpecHeadings(headings):
        Want to keep the collision data for multi-page, so I can tell when you request a non-existent page,
        but need to collapse away the collision stuff for single-page.'''
     for specHeadings in headings.values():
-        for k, v in specHeadings.items():
+        for k, v in list(specHeadings.items()):
             if k[0] == "#" and len(v) == 1 and v[0][0:2] == "/#":
                 # No collision, and this is either a single-page spec or a non-colliding front-page link
                 # Go ahead and collapse them.
@@ -305,7 +323,7 @@ def extractForsData(anchors):
                 fors[for_].add(key)
             if not anchor["for"]:
                 fors["/"].add(key)
-    for key, val in fors.items():
+    for key, val in list(fors.items()):
         fors[key] = sorted(val)
     return fors
 
@@ -339,7 +357,7 @@ def writeAnchorsFile(anchors, path):
                 for e in entries:
                     fh.write(key + "\n")
                     for field in ["type", "spec", "shortname", "level", "status", "url"]:
-                        fh.write(unicode(e.get(field, "")) + "\n")
+                        fh.write(str(e.get(field, "")) + "\n")
                     for field in ["export", "normative"]:
                         if e.get(field, False):
                             fh.write("1\n")

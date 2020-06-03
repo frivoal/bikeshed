@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import json
 from collections import OrderedDict
 from datetime import datetime
@@ -23,6 +23,8 @@ def addCanIUsePanels(doc):
 
     atLeastOnePanel = False
     elements = findAll("[caniuse]", doc)
+    if not elements:
+        return
     validateCanIUseURLs(doc, elements)
     for dfn in elements:
         featId = dfn.get("caniuse")
@@ -105,7 +107,7 @@ def addCanIUsePanels(doc):
 
 def canIUsePanelFor(id, data, update, classFromBrowser):
     panel = E.aside({"class": "caniuse-status", "data-deco": ""},
-        E.input({"value": u"\u22F0", "type": "button", "class":"caniuse-panel-btn"}))
+        E.input({"value": "\u22F0", "type": "button", "class":"caniuse-panel-btn"}))
     mainPara = E.p({"class": "support"}, E.b({}, "Support:"))
     appendChild(panel, mainPara)
     for browser,support in data['support'].items():

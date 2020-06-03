@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import glob
 import io
@@ -11,7 +11,9 @@ from datetime import datetime
 from . import biblio
 from . import boilerplate
 from . import caniuse
+from . import mdnspeclinks
 from . import config
+from . import constants
 from . import datablocks
 from . import extensions
 from . import fingerprinting
@@ -35,12 +37,12 @@ from .unsortedJunk import *
 
 class Spec(object):
 
-    def __init__(self, inputFilename, debug=False, token=None, lineNumbers=False, fileRequester=None):
+    def __init__(self, inputFilename, debug=False, token=None, lineNumbers=False, fileRequester=None, testing=False):
         self.valid = False
         self.lineNumbers = lineNumbers
         if lineNumbers:
             # line-numbers are too hacky, so force this to be a dry run
-            config.dryRun = True
+            constants.dryRun = True
         if inputFilename is None:
             inputFilename = findImplicitInputFile()
         if inputFilename is None: # still
@@ -49,6 +51,7 @@ class Spec(object):
         self.inputSource = inputFilename
         self.debug = debug
         self.token = token
+        self.testing = testing
         if fileRequester is None:
             self.dataFile = config.defaultRequester
         else:
@@ -59,7 +62,7 @@ class Spec(object):
     def initializeState(self):
         self.normativeRefs = {}
         self.informativeRefs = {}
-        self.refs = ReferenceManager(fileRequester=self.dataFile)
+        self.refs = ReferenceManager(fileRequester=self.dataFile, testing=self.testing)
         self.externalRefsUsed = defaultdict(lambda:defaultdict(dict))
         self.md = None
         self.mdBaseline = metadata.MetadataManager()
@@ -71,6 +74,7 @@ class Spec(object):
         self.typeExpansions = {}
         self.macros = defaultdict(lambda x: "???")
         self.canIUse = {}
+        self.mdnSpecLinks = {}
         self.widl = idl.getParser()
         self.testSuites = json.loads(self.dataFile.fetch("test-suites.json", str=True))
         self.languages = json.loads(self.dataFile.fetch("languages.json", str=True))
@@ -83,7 +87,7 @@ class Spec(object):
 
         try:
             if self.inputSource == "-":
-                self.lines = [Line(i,unicode(line, encoding="utf-8")) for i,line in enumerate(sys.stdin.readlines(), 1)]
+                self.lines = [Line(i,line) for i,line in enumerate(sys.stdin.readlines(), 1)]
             else:
                 self.lines = [Line(i,l) for i,l in enumerate(io.open(self.inputSource, 'r', encoding="utf-8").readlines(), 1)]
                 # Initialize date to the last-modified date on the file,
@@ -167,6 +171,7 @@ class Spec(object):
         boilerplate.addCopyright(self)
         boilerplate.addSpecMetadataSection(self)
         boilerplate.addAbstract(self)
+        boilerplate.addExpiryNotice(self)
         boilerplate.addObsoletionNotice(self)
         boilerplate.addAtRisk(self)
         addNoteHeaders(self)
@@ -198,6 +203,7 @@ class Spec(object):
         biblio.dedupBiblioReferences(self)
         verifyUsageOfAllLocalBiblios(self)
         caniuse.addCanIUsePanels(self)
+        mdnspeclinks.addMdnPanels(self)
         boilerplate.addIndexSection(self)
         boilerplate.addExplicitIndexes(self)
         boilerplate.addStyles(self)
@@ -270,7 +276,7 @@ class Spec(object):
         self.printResultMessage()
         outputFilename = self.fixMissingOutputFilename(outputFilename)
         rendered = self.serialize()
-        if not config.dryRun:
+        if not constants.dryRun:
             try:
                 if outputFilename == "-":
                     sys.stdout.write(rendered.encode("utf-8"))
@@ -306,19 +312,19 @@ class Spec(object):
 
         if port:
             # Serve the folder on an HTTP server
-            import SimpleHTTPServer
-            import SocketServer
+            import http.server
+            import socketserver
             import threading
 
-            class SilentServer(SimpleHTTPServer.SimpleHTTPRequestHandler):
+            class SilentServer(http.server.SimpleHTTPRequestHandler):
                 def log_message(*args):
                     pass
 
-            SocketServer.TCPServer.allow_reuse_address = True
-            server = SocketServer.TCPServer(
+            socketserver.TCPServer.allow_reuse_address = True
+            server = socketserver.TCPServer(
               ("localhost" if localhost else "", port), SilentServer)
 
-            print "Serving at port {0}".format(port)
+            print("Serving at port {0}".format(port))
             thread = threading.Thread(target = server.serve_forever)
             thread.daemon = True
             thread.start()
@@ -418,7 +424,7 @@ def findImplicitInputFile():
 
     return None
 
-config.specClass = Spec
+constants.specClass = Spec
 
 styleMdLists = '''
 /* This is a weird hack for me not yet following the commonmark spec

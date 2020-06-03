@@ -1,26 +1,24 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import hashlib
 import html5lib
-import HTMLParser
+import html
 import re
 from collections import Counter, defaultdict
 from lxml import etree
-from lxml import html
+from lxml.html import tostring
 from lxml.cssselect import CSSSelector
 
 from . import config
+from .DefaultOrderedDict import DefaultOrderedDict
 from .messages import *
 
-unescapeParser = HTMLParser.HTMLParser()
-
-
 def unescape(string):
-    return unescapeParser.unescape(string)
+    return html.unescape(string)
 
 
 def findAll(sel, context):
-    if isinstance(context, config.specClass):
+    if isinstance(context, constants.specClass):
         context = context.document
     try:
         return CSSSelector(sel, namespaces={"svg":"http://www.w3.org/2000/svg"})(context)
@@ -70,8 +68,7 @@ def escapeUrlFrag(val):
         if validUrlUnit(char):
             result += char
         else:
-            bytes = map(ord, char.encode("utf-8"))
-            for b in bytes:
+            for b in char.encode("utf-8"):
                 result += "%{:0>2x}".format(b)
     return result
 
@@ -109,7 +106,7 @@ def textContent(el, exact=False):
     if len(el) == 0:
         return el.text or ''
     if exact:
-        return html.tostring(el, method='text', with_tail=False, encoding="unicode")
+        return tostring(el, method='text', with_tail=False, encoding="unicode")
     else:
         return textContentIgnoringDecorative(el)
 
@@ -126,7 +123,7 @@ def textContentIgnoringDecorative(el):
 def innerHTML(el):
     if el is None:
         return ''
-    return (el.text or '') + ''.join(html.tostring(x, encoding="unicode") for x in el)
+    return (el.text or '') + ''.join(tostring(x, encoding="unicode") for x in el)
 
 
 def outerHTML(el, literal=False):
@@ -134,7 +131,7 @@ def outerHTML(el, literal=False):
         return ''
     if el.get("bs-autolink-syntax") is not None and not literal:
         return el.get("bs-autolink-syntax")
-    return html.tostring(el, with_tail=False, encoding="unicode")
+    return tostring(el, with_tail=False, encoding="unicode")
 
 def serializeTag(el):
     # Serialize *just* the opening tag for the element.
@@ -197,7 +194,7 @@ def appendChild(parent, *children):
     # Appends either text or an element.
     children = list(config.flatten(children))
     for child in children:
-        if isinstance(child, basestring):
+        if isinstance(child, str):
             if len(parent) > 0:
                 parent[-1].tail = (parent[-1].tail or '') + child
             else:
@@ -219,7 +216,7 @@ def appendChild(parent, *children):
 
 def prependChild(parent, child):
     # Prepends either text or an element to the parent.
-    if isinstance(child, basestring):
+    if isinstance(child, str):
         if parent.text is None:
             parent.text = child
         else:
@@ -237,7 +234,7 @@ def insertBefore(target, *els):
     index = parent.index(target)
     prevSibling = parent[index - 1] if index > 0 else None
     for el in els:
-        if isinstance(el, basestring):
+        if isinstance(el, str):
             if prevSibling is not None:
                 prevSibling.tail = (prevSibling.tail or '') + el
             else:
@@ -252,7 +249,7 @@ def insertBefore(target, *els):
 def insertAfter(target, *els):
     parent = target.getparent()
     for el in els:
-        if isinstance(el, basestring):
+        if isinstance(el, str):
             target.tail = (target.tail or '') + el
         else:
             parent.insert(parent.index(target) + 1, el)
@@ -424,7 +421,7 @@ def nodeIter(el, clear=False, skipOddNodes=True):
     # (In other words, same as el.iter(),
     #  but returning nodes+strings rather than the stupid LXML model.)
     # Takes the same kwargs as childNodes
-    if isinstance(el, basestring):
+    if isinstance(el, str):
         yield el
         return
     if isinstance(el, etree._ElementTree):
@@ -537,12 +534,12 @@ def removeClass(el, cls):
 
 def isElement(node):
     # LXML HAS THE DUMBEST XML TREE DATA MODEL IN THE WORLD
-    return etree.iselement(node) and isinstance(node.tag, basestring)
+    return etree.iselement(node) and isinstance(node.tag, str)
 
 
 def isOddNode(node):
     # Something other than an element node or string.
-    if isinstance(node, basestring):
+    if isinstance(node, str):
         return False
     if isElement(node):
         return False
@@ -582,7 +579,7 @@ def isEmpty(el):
 
 def hasChildElements(el):
     try:
-        childElements(el).next()
+        next(childElements(el))
         return True
     except StopIteration:
         return False
@@ -648,7 +645,7 @@ def hashContents(el):
     # Hash the contents of an element into an 8-character alphanum string.
     # Generally used for generating probably-unique IDs.
     # Normalize whitespace away to avoid git-related newline normalization issues.
-    text = re.sub(r"\s+", " ", textContent(el).strip().encode("ascii", "xmlcharrefreplace"))
+    text = re.sub(r"\s+", " ", textContent(el).strip()).encode("ascii", "xmlcharrefreplace")
     return hashlib.md5(text).hexdigest()[0:8]
 
 
@@ -673,7 +670,7 @@ def replaceMacros(text, macros):
         if innerText in macros:
             # For some reason I store all the macros in lowercase,
             # despite requiring them to be spelled with uppercase.
-            return macros[innerText]
+            return str(macros[innerText])
         # Nothing has matched, so start failing the macros.
         if optional:
             return ""
@@ -736,10 +733,10 @@ def dedupIDs(doc):
 
     def findId(id):
         return find("#" + id, doc) is not None
-    ids = defaultdict(list)
+    ids = DefaultOrderedDict(list)
     for el in findAll("[id]", doc):
         ids[el.get('id')].append(el)
-    for dupeId,els in ids.items():
+    for dupeId,els in list(ids.items()):
         if len(els) < 2:
             # Only one instance, so nothing to do.
             continue
@@ -792,17 +789,12 @@ def approximateLineNumber(el, setIntermediate=True):
 def circledDigits(num):
     '''
     Converts a base-10 number into a string using unicode circled digits.
-    That is, 123 becomes u"①②③"
+    That is, 123 becomes "①②③"
     '''
     num = int(num)
     assert(num >= 0)
     digits = ["⓪","①","②","③","④","⑤","⑥","⑦","⑧","⑨"]
-    result = ""
-    if num <= 0:
-        return digits[0]
-    while(num > 0):
-        result = digits[num%10] + result
-        num = num // 10
+    result = "".join(digits[int(d)] for d in str(num))
     return result
 
 
@@ -813,7 +805,7 @@ def nextIter(it, default=None):
     rather than throwing an error.
     '''
     try:
-        return iter(it).next()
+        return next(iter(it))
     except StopIteration:
         return default
 
@@ -828,7 +820,7 @@ def createElement(tag, attrs={}, *children):
 class ElementCreationHelper:
     def __getattr__(self, name):
         def _creater(*children):
-            if children and not (isinstance(children[0], basestring) or isElement(children[0])):
+            if children and not (isinstance(children[0], str) or isElement(children[0])):
                 attrs = children[0]
                 children = children[1:]
             else:

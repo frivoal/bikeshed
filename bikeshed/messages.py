@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import sys
 from collections import Counter
-from lxml import html
-import config
+import lxml.html
+from . import constants
 
 
 
@@ -16,19 +16,19 @@ def p(msg):
         msg, ascii = msg
     else:
         ascii = None
-    if config.quiet == float("infinity"):
+    if constants.quiet == float("infinity"):
         return
     try:
-        print msg
+        print(msg)
     except UnicodeEncodeError:
         if ascii is not None:
-            print ascii.encode("ascii", "replace")
+            print(ascii.encode("ascii", "replace"))
         else:
             warning = formatMessage("warning", "Your console does not understand Unicode.\n  Messages may be slightly corrupted.")
             if warning not in messages:
-                print warning
+                print(warning)
                 messages.add(warning)
-            print msg.encode("ascii", "xmlcharrefreplace")
+            print(msg.encode("ascii", "xmlcharrefreplace"))
 
 
 def die(msg, *formatArgs, **namedArgs):
@@ -41,9 +41,9 @@ def die(msg, *formatArgs, **namedArgs):
     if msg not in messages:
         messageCounts["fatal"] += 1
         messages.add(msg)
-        if config.quiet < 3:
+        if constants.quiet < 3:
             p(msg)
-    if config.errorLevelAt("fatal"):
+    if constants.errorLevelAt("fatal"):
         errorAndExit()
 
 
@@ -58,16 +58,16 @@ def linkerror(msg, *formatArgs, **namedArgs):
             if el.get("bs-autolink-syntax"):
                 suffix = "\n{0}".format(el.get("bs-autolink-syntax"))
             else:
-                suffix = "\n{0}".format(html.tostring(namedArgs['el'], with_tail=False, encoding="unicode"))
+                suffix = "\n{0}".format(lxml.html.tostring(namedArgs['el'], with_tail=False, encoding="unicode"))
     elif namedArgs.get("lineNum", None):
         lineNum = namedArgs['lineNum']
     msg = formatMessage("link", msg.format(*formatArgs, **namedArgs)+suffix, lineNum=lineNum)
     if msg not in messages:
         messageCounts["linkerror"] += 1
         messages.add(msg)
-        if config.quiet < 2:
+        if constants.quiet < 2:
                 p(msg)
-    if config.errorLevelAt("link-error"):
+    if constants.errorLevelAt("link-error"):
         errorAndExit()
 
 
@@ -81,25 +81,25 @@ def warn(msg, *formatArgs, **namedArgs):
     if msg not in messages:
         messageCounts["warning"] += 1
         messages.add(msg)
-        if config.quiet < 1:
+        if constants.quiet < 1:
                 p(msg)
-    if config.errorLevelAt("warning"):
+    if constants.errorLevelAt("warning"):
         errorAndExit()
 
 
 def say(msg, *formatArgs, **namedArgs):
-    if config.quiet < 1:
+    if constants.quiet < 1:
         p(formatMessage("message", msg.format(*formatArgs, **namedArgs)))
 
 
 def success(msg, *formatArgs, **namedArgs):
-    if config.quiet < 4:
+    if constants.quiet < 4:
         msg = formatMessage("success", msg.format(*formatArgs, **namedArgs))
         p(msg)
 
 
 def failure(msg, *formatArgs, **namedArgs):
-    if config.quiet < 4:
+    if constants.quiet < 4:
         msg = formatMessage("failure", msg.format(*formatArgs, **namedArgs))
         p(msg)
 
@@ -112,7 +112,7 @@ def resetSeenMessages():
 
 
 def printColor(text, color="white", *styles):
-    if config.printMode == "console":
+    if constants.printMode == "console":
         colorsConverter = {
             "black": 30,
             "red": 31,
@@ -152,7 +152,7 @@ def printColor(text, color="white", *styles):
 
 
 def formatMessage(type, text, lineNum=None):
-    if config.printMode == "markup":
+    if constants.printMode == "markup":
         text = text.replace("<", "&lt;")
         if type == "fatal":
             return "<fatal>{0}</fatal>".format(text)

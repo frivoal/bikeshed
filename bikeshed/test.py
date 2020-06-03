@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import division, unicode_literals
+
 import difflib
+import glob
 import io
 import os
 import pipes
@@ -54,11 +55,11 @@ def runAllTests(Spec, testFiles=None, manualOnly=False, md=None):
     total = 0
     fails = []
     for i,testPath in enumerate(testFiles, 1):
-        justifiedI = unicode(i).rjust(len(str(len(testFiles))))
+        justifiedI = str(i).rjust(len(str(len(testFiles))))
         testName = testNameForPath(testPath)
         p("{0}/{1}: {2}".format(justifiedI, len(testFiles), testName))
         total += 1
-        doc = Spec(inputFilename=testPath, fileRequester=fileRequester)
+        doc = Spec(inputFilename=testPath, fileRequester=fileRequester, testing=True)
         if md is not None:
             doc.mdCommandLine = md
         addTestMetadata(doc)
@@ -113,26 +114,39 @@ def equalOrEmpty(a, b):
 
 def rebase(Spec, files=None, md=None):
     fileRequester = config.DataFileRequester(type="readonly")
-    if not files:
-        files = list(sortTests(findTestFiles()))
-        if len(files) == 0:
-            p("No tests were found")
-            return True
-    else:
-        files = [os.path.join(TEST_DIR, x) for x in files]
+    files = testPaths(files)
+    if len(files) == 0:
+        p("No tests were found.")
+        return True
     for i,path in enumerate(files, 1):
-        justifiedI = unicode(i).rjust(len(str(len(files))))
+        justifiedI = str(i).rjust(len(str(len(files))))
         resetSeenMessages()
         name = testNameForPath(path)
         p("{0}/{1}: Rebasing {2}".format(justifiedI, len(files), name))
-        doc = Spec(path, fileRequester=fileRequester)
+        doc = Spec(path, fileRequester=fileRequester, testing=True)
         if md:
             doc.mdCommandLine = md
         addTestMetadata(doc)
         doc.preprocess()
         doc.finish()
 
+def testPaths(files=None):
+    # if None, get all the test paths
+    # otherwise, glob the provided paths, rooted at the test dir
+    if not files:
+        return list(sortTests(findTestFiles()))
+    else:
+        return [path
+            for file in files
+            for path in glob.glob(os.path.join(TEST_DIR, file))
+            if path.endswith(".bs")]
+
 def addTestMetadata(doc):
+    from . import metadata
+
     doc.mdBaseline.addData("Boilerplate", "omit feedback-header, omit generator, omit document-revision")
-    doc.mdCommandLine.addData("Date", "1970-01-01")
-    doc.mdCommandLine.addData("Inline Github Issues", "no")
+    _, md = metadata.parse(lines=doc.lines)
+    if "Date" not in md.manuallySetKeys:
+        doc.mdCommandLine.addData("Date", "1970-01-01")
+    if "Inline Github Issue" not in md.manuallySetKeys:
+        doc.mdCommandLine.addData("Inline Github Issues", "no")

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import copy
 import os
 import re
 import subprocess
 from collections import defaultdict, OrderedDict
+from datetime import datetime
 from . import config
 from . import dfnpanels
 from .refs import utils as refUtils
@@ -18,12 +19,28 @@ def addBikeshedVersion(doc):
     if "generator" not in doc.md.boilerplate:
         return
     try:
-        bikeshedVersion = subprocess.check_output("git rev-parse HEAD", cwd=config.scriptPath(), shell=True).rstrip()
+        # Check that we're in the bikeshed repo
+        origin = subprocess.check_output(
+            "git remote -v",
+            cwd=config.scriptPath(),
+            stderr=subprocess.DEVNULL,
+            shell=True).decode(encoding="utf-8")
+        if "bikeshed" not in origin:
+            # In a repo, but not bikeshed's;
+            # probably pip-installed into an environment's repo or something.
+            raise Exception()
+        # Otherwise, success, this is a -e install,
+        # so we're in Bikeshed's repo.
+        bikeshedVersion = subprocess.check_output(
+            r"git log -1 --format='Bikeshed version %h, updated %cd'",
+            cwd=config.scriptPath(),
+            stderr=subprocess.DEVNULL,
+            shell=True).decode(encoding="utf-8").strip()
     except Exception as e:
-        warn("Couldn't discover the current Bikeshed version. Please report this error:\n{0}", e)
-        return
+        # Not in Bikeshed's repo, so instead grab from the datafile.
+        bikeshedVersion = doc.dataFile.fetch("bikeshed-version.txt", type="readonly", str=True).strip()
     appendChild(doc.head,
-                E.meta({"name": "generator", "content": "Bikeshed version {0}".format(bikeshedVersion)}))
+                E.meta({"name": "generator", "content": bikeshedVersion}))
 
 
 def addCanonicalURL(doc):
@@ -51,12 +68,12 @@ def addSpecVersion(doc):
     try:
         # Check for a Git repo
         with open(os.devnull, "wb") as fnull:
-            revision = subprocess.check_output("git rev-parse HEAD", stderr=fnull, shell=True).strip()
+            revision = subprocess.check_output("git rev-parse HEAD", stderr=fnull, shell=True).decode(encoding="utf-8").strip()
     except subprocess.CalledProcessError:
         try:
             # Check for an Hg repo
             with open(os.devnull, "wb") as fnull:
-                revision = subprocess.check_output("hg parent --temp='{node}'", stderr=fnull, shell=True).strip()
+                revision = subprocess.check_output("hg parent --temp='{node}'", stderr=fnull, shell=True).decode(encoding="utf-8").strip()
         except:
             pass
     os.chdir(old_dir)
@@ -134,6 +151,32 @@ def addStatusSection(doc):
     fillWith('status', parseHTML(html), doc=doc)
 
 
+def addExpiryNotice(doc):
+    if doc.md.expires is None:
+        return
+    if doc.md.date >= doc.md.expires or datetime.utcnow().date() >= doc.md.expires:
+        boilerplate = "warning-expired"
+    else:
+        boilerplate = "warning-expires"
+        doc.extraScripts['script-expires'] = expiryScript
+    html = config.retrieveBoilerplateFile(doc, boilerplate)
+    html = doc.fixText(html)
+    fillWith('warning', parseHTML(html), doc=doc)
+    addClass(doc.body, boilerplate)
+
+expiryScript = '''
+const warning = document.querySelector('#expiry-notice');
+const expiresOn = warning.dataset.expires;
+const today = new Date().toISOString();
+if(expires < today) {
+    warning.setAttribute("open", "");
+    for(const swap of warning.querySelectorAll("[data-after-expiry]")) {
+        swap.textContent = swap.dataset.afterExpiry;
+    }
+}
+'''
+
+
 def addObsoletionNotice(doc):
     if doc.md.warning:
         html = config.retrieveBoilerplateFile(doc, doc.md.warning[0])
@@ -180,7 +223,7 @@ def addAnnotations(doc):
 
 
 def addBikeshedBoilerplate(doc):
-    for k,v in doc.extraStyles.items():
+    for k,v in sorted(doc.extraStyles.items()):
         if k not in doc.md.boilerplate:
             continue
         container = getFillContainer(k, doc)
@@ -189,7 +232,7 @@ def addBikeshedBoilerplate(doc):
         if container is not None:
             appendChild(container,
                         E.style("/* {0} */\n".format(k) + v))
-    for k,v in doc.extraScripts.items():
+    for k,v in sorted(doc.extraScripts.items()):
         if k not in doc.md.boilerplate:
             continue
         container = getFillContainer(k, doc)
@@ -201,7 +244,7 @@ def addBikeshedBoilerplate(doc):
 
 
 def addIndexSection(doc):
-    if len(findAll(config.dfnElementsSelector, doc)) == 0 and len(doc.externalRefsUsed.keys()) == 0:
+    if len(findAll(config.dfnElementsSelector, doc)) == 0 and len(list(doc.externalRefsUsed.keys())) == 0:
         return
     container = getFillContainer('index', doc=doc, default=True)
     if container is None:
@@ -212,7 +255,7 @@ def addIndexSection(doc):
     if len(findAll(config.dfnElementsSelector, doc)):
         addIndexOfLocallyDefinedTerms(doc, container)
 
-    if len(doc.externalRefsUsed.keys()):
+    if len(list(doc.externalRefsUsed.keys())):
         addIndexOfExternallyDefinedTerms(doc, container)
 
 
@@ -364,16 +407,13 @@ def addExplicitIndexes(doc):
                 ttf = (text, ref.type, "".join(ref.for_) if ref.for_ else None)
                 refsFromTtf[ttf].append(ref)
         filteredRefs = defaultdict(list)
-        for ttf, refs in refsFromTtf.items():
+        for ttf, refs in list(refsFromTtf.items()):
             refs = doc.refs.filterObsoletes(refs)
             refs = refUtils.filterOldVersions(refs)
             if refs:
                 filteredRefs[ttf[0]].extend({"url":ref.url, "disambiguator":disambiguator(ref)} for ref in refs)
 
-        # Sort the entries before generating
-        indexEntries = OrderedDict(sorted(filteredRefs.items(), key=lambda x:x[0].lower()))
-
-        appendChild(el, htmlFromIndexTerms(indexEntries))
+        appendChild(el, htmlFromIndexTerms(filteredRefs))
         el.tag = "div"
         removeAttr(el, "export", "for", "spec", "status", "type")
 
@@ -382,7 +422,17 @@ def htmlFromIndexTerms(entries):
     # entries: dict (preferably OrderedDict, if you want stability) of linkText=>{url, label, disambiguator}
     # label is used for the actual link (normally heading level), disambiguator is phrase to use when there are collisions
 
-    entries = OrderedDict(sorted(entries.items(), key=lambda x:re.sub(r'[^a-z0-9]', '', x[0].lower())))
+    def entryKey(x):
+        return (
+            # first group by approximating a human-friendly "nearness" of terms
+            re.sub(r'[^a-z0-9]', '', x[0].lower()),
+            # then within that, by case-ignoring exact text
+            x[0].lower(),
+            # and finally uniquely by exact text
+            x[0]
+        )
+
+    entries = OrderedDict(sorted(entries.items(), key=entryKey))
 
     topList = E.ul({"class":"index"})
     for text, items in entries.items():
@@ -435,7 +485,7 @@ def addIndexOfExternallyDefinedTerms(doc, container):
         termsUl = appendChild(specLi, E.ul())
         for text,refs in sorted(refGroups.items(), key=lambda x:x[0]):
             if len(refs) == 1:
-                ref = refs.values()[0]
+                ref = list(refs.values())[0]
                 link = makeLink(ref.text)
             else:
                 for key,ref in sorted(refs.items(), key=lambda x:x[0]):
@@ -582,7 +632,7 @@ def addPropertyIndex(doc):
 
 
 def addIDLSection(doc):
-    idlBlocks = filter(lambda x:isNormative(x, doc), findAll("pre.idl, xmp.idl", doc))
+    idlBlocks = [x for x in findAll("pre.idl, xmp.idl", doc) if isNormative(x, doc)]
     if len(idlBlocks) == 0:
         return
     html = getFillContainer('idl-index', doc=doc, default=True)
@@ -599,10 +649,11 @@ def addIDLSection(doc):
         blockCopy = copy.deepcopy(block)
         appendContents(container, blockCopy)
         appendChild(container, "\n")
-    for dfn in findAll("dfn[id]", container):
-        dfn.tag = "a"
-        dfn.set("href", "#" + dfn.get("id"))
-        del dfn.attrib["id"]
+    for el in findAll("[id]", container):
+        if el.tag == "dfn":
+            el.tag = "a"
+            el.set("href", "#" + el.get("id"))
+        del el.attrib["id"]
     addClass(container, "highlight")
 
 
@@ -770,12 +821,12 @@ def addSpecMetadataSection(doc):
         md["Issue Tracking"] = [E.a({"href":href}, text) for text,href in doc.md.issues]
     if doc.md.editors:
         editorTerm = doc.md.editorTerm['singular']
-        md[editorTerm] = map(printEditor, doc.md.editors)
+        md[editorTerm] = list(map(printEditor, doc.md.editors))
     if doc.md.previousEditors:
         editorTerm = doc.md.editorTerm['singular']
-        md["Former " + editorTerm] = map(printEditor, doc.md.previousEditors)
+        md["Former " + editorTerm] = list(map(printEditor, doc.md.previousEditors))
     if doc.md.translations:
-        md["Translations"] = map(printTranslation, doc.md.translations)
+        md["Translations"] = list(map(printTranslation, doc.md.translations))
     if doc.md.audience:
         md["Audience"] = [", ".join(doc.md.audience)]
     if doc.md.toggleDiffs:

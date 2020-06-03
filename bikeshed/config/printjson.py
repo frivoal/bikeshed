@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 from ..messages import printColor
+from ..htmlhelpers import outerHTML, isElement
 
 def printjson(x, indent=2, level=0):
     if isinstance(indent, int):
@@ -66,11 +67,13 @@ def printjsonsimplearray(x, indent, level):
 def printjsonprimitive(x):
     x = getjson(x)
     if isinstance(x, int):
-        return unicode(x)
-    if isinstance(x, basestring):
+        return str(x)
+    if isinstance(x, str):
         return x
     if isinstance(x, bool):
-        return unicode(x)
+        return str(x)
     if x is None:
         return "null"
+    if isElement(x):
+        return repr(x) + ":" + outerHTML(x)
     raise Exception(x)

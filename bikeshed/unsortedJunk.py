@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import io
 import itertools
@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import re
-import urllib
+import urllib.parse, urllib.error
 from collections import defaultdict, namedtuple
 from functools import partial as curry
 
@@ -179,7 +179,11 @@ def addImplicitAlgorithms(doc):
     for el in findAll("[data-algorithm='']:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6)", doc):
         dfns = findAll("dfn", el)
         if len(dfns) == 1:
-            el.set("data-algorithm", config.firstLinkTextFromElement(dfns[0]))
+            dfnName = config.firstLinkTextFromElement(dfns[0])
+            el.set("data-algorithm", dfnName)
+            dfnFor = dfns[0].get('data-dfn-for')
+            if dfnFor:
+                el.set("data-algorithm-for", dfnFor)
         elif len(dfns) == 0:
             die("Algorithm container has no name, and there is no <dfn> to infer one from.", el=el)
         else:
@@ -187,22 +191,33 @@ def addImplicitAlgorithms(doc):
 
 
 def checkVarHygiene(doc):
-    def nearestAlgo(var):
+    def isAlgo(el):
+        return el.get("data-algorithm") is not None
+    def nearestAlgo(el):
         # Find the nearest "algorithm" container,
         # either an ancestor with [algorithm] or the nearest heading with same.
-        algo = treeAttr(var, "data-algorithm")
-        if algo:
-            return algo or None
-        for h in relevantHeadings(var):
-            algo = h.get("data-algorithm")
-            if algo is not None and algo is not "":
-                return algo
+        if isAlgo(el):
+            return el
+        ancestor = closestAncestor(el, isAlgo)
+        if ancestor is not None:
+            return ancestor
+        for h in relevantHeadings(el):
+            if isAlgo(h):
+                return h
+    def algoName(el):
+        # Finds a uniquified algorithm name from an algo container
+        algo = nearestAlgo(el)
+        if algo is None:
+            return None
+        algoName = algo.get("data-algorithm")
+        algoFor = algo.get("data-algorithm-for")
+        return f"'{algoName}'" + (f" for {algoFor}" if algoFor else "")
 
     # Look for vars that only show up once. These are probably typos.
     singularVars = []
     varCounts = defaultdict(lambda: 0)
     for el in findAll("var:not([data-var-ignore])", doc):
-        key = foldWhitespace(textContent(el)).strip(), nearestAlgo(el)
+        key = (foldWhitespace(textContent(el)).strip(), algoName(el))
         varCounts[key] += 1
     foldedVarCounts = defaultdict(lambda: 0)
     atLeastOneAlgo = False
@@ -219,9 +234,9 @@ def checkVarHygiene(doc):
     for (var, algo),count in foldedVarCounts.items():
         if count == 1:
             if algo:
-                varLines.append("  '{0}', in algorithm '{1}'".format(var, algo))
+                varLines.append(f"  '{var}', in algorithm {algo}")
             else:
-                varLines.append("  '{0}'".format(var))
+                varLines.append(f"  '{var}'")
     if varLines:
         warn("The following <var>s were only used once in the document:\n{0}\nIf these are not typos, please add an ignore='' attribute to the <var>.", "\n".join(varLines))
 
@@ -229,9 +244,9 @@ def checkVarHygiene(doc):
         addVarClickHighlighting(doc)
 
     # Look for algorithms that show up twice; these are errors.
-    for algo, count in Counter(el.get('data-algorithm') for el in findAll("[data-algorithm]", doc)).items():
+    for algo, count in Counter(algoName(el) for el in findAll("[data-algorithm]", doc)).items():
         if count > 1:
-            die("Multiple declarations of the '{0}' algorithm.", algo)
+            die(f"Multiple declarations of the {algo} algorithm.")
             return
 
 
@@ -352,7 +367,7 @@ def fixIntraDocumentReferences(doc):
     ids = {el.get('id'):el for el in findAll("[id]", doc)}
     headingIDs = {el.get('id'):el for el in findAll("[id].heading", doc)}
     for el in findAll("a[href^='#']:not([href='#']):not(.self-link):not([data-link-type])", doc):
-        targetID = urllib.unquote(el.get("href")[1:])
+        targetID = urllib.parse.unquote(el.get("href")[1:])
         if el.get('data-section') is not None and targetID not in headingIDs:
             die("Couldn't find target document section {0}:\n{1}", targetID, outerHTML(el), el=el)
             continue
@@ -627,7 +642,7 @@ def classifyDfns(doc, dfns):
                 elif dfnType in config.idlTypes:
                     # IDL methodish construct, ask the widlparser what it should have.
                     # If the method isn't in any IDL, this tries its best to normalize it anyway.
-                    names = list(doc.widl.normalizedMethodNames(primaryDfnText, el.get('data-dfn-for')))
+                    names = list(doc.widl.normalized_method_names(primaryDfnText, el.get('data-dfn-for')))
                     primaryDfnText = names[0]
                     el.set('data-lt', "|".join(names))
                 else:
@@ -637,7 +652,7 @@ def classifyDfns(doc, dfns):
             parent = el.getparent()
             parentFor = parent.get('data-dfn-for')
             if parent.get('data-dfn-type') in config.functionishTypes and parentFor is not None:
-                dfnFor = ", ".join(parentFor + "/" + name for name in doc.widl.normalizedMethodNames(textContent(parent), parentFor))
+                dfnFor = ", ".join(parentFor + "/" + name for name in doc.widl.normalized_method_names(textContent(parent), parentFor))
             elif treeAttr(el, "data-dfn-for") is None:
                 die("'argument' dfns need to specify what they're for, or have it be inferrable from their parent. Got:\n{0}", outerHTML(el), el=el)
                 continue
@@ -814,7 +829,7 @@ def verifyUsageOfAllLocalBiblios(doc):
     were used in the spec,
     so you can remove entries when they're no longer necessary.
     '''
-    usedBiblioKeys = set(x.lower() for x in doc.normativeRefs.keys() + doc.informativeRefs.keys())
+    usedBiblioKeys = set(x.lower() for x in list(doc.normativeRefs.keys()) + list(doc.informativeRefs.keys()))
     localBiblios = [b["linkText"].lower() for bs in doc.refs.biblios.values() for b in bs if b['order'] == 1]
     unusedBiblioKeys = []
     for b in localBiblios:
@@ -925,8 +940,9 @@ def decorateAutolink(doc, el, linkType, linkText, ref):
             titleText = doc.typeExpansions[linkText]
         else:
             refs = doc.refs.queryAllRefs(linkFor=linkText, ignoreObsoletes=True)
+            texts = sorted({ref.text for ref in refs})
             if refs:
-                titleText = "Expands to: " + ' | '.join({ref.text for ref in refs})
+                titleText = "Expands to: " + ' | '.join(texts)
                 doc.typeExpansions[linkText] = titleText
         if titleText:
             el.set('title', titleText)
@@ -1150,9 +1166,9 @@ def cleanupHTML(doc):
             el.set("data-noexport", "")
 
         if doc.md.slimBuildArtifact:
-            # Remove *all* data- attributes.
+            # Remove *all* data- attributes, except data-mdn-for attributes
             for attrName in el.attrib:
-                if attrName.startswith("data-"):
+                if attrName.startswith("data-") and attrName != "data-mdn-for":
                     removeAttr(el, attrName)
     for el in strayHeadEls:
         head.append(el)
@@ -1217,7 +1233,7 @@ def formatElementdefTables(doc):
 
 def formatArgumentdefTables(doc):
     for table in findAll("table.argumentdef", doc):
-        forMethod = doc.widl.normalizedMethodNames(table.get("data-dfn-for"))
+        forMethod = doc.widl.normalized_method_names(table.get("data-dfn-for"))
         method = doc.widl.find(table.get("data-dfn-for"))
         if not method:
             die("Can't find method '{0}'.", forMethod, el=table)
@@ -1225,10 +1241,10 @@ def formatArgumentdefTables(doc):
         for tr in findAll("tbody > tr", table):
             tds = findAll("td", tr)
             argName = textContent(tds[0]).strip()
-            arg = method.findArgument(argName)
+            arg = method.find_argument(argName)
             if arg:
-                appendChild(tds[1], unicode(arg.type))
-                if unicode(arg.type).strip().endswith("?"):
+                appendChild(tds[1], str(arg.type))
+                if str(arg.type).strip().endswith("?"):
                     appendChild(tds[2],
                                 E.span({"class":"yes"}, "✔"))
                 else:
@@ -1241,7 +1257,7 @@ def formatArgumentdefTables(doc):
                     appendChild(tds[3],
                                 E.span({"class":"no"}, "✘"))
             else:
-                die("Can't find the '{0}' argument of method '{1}' in the argumentdef block.", argName, method.fullName, el=table)
+                die(f"Can't find the '{argName}' argument of method '{method.full_name}' in the argumentdef block.", el=table)
                 continue
 
 
@@ -1261,7 +1277,7 @@ def inlineRemoteIssues(doc):
     if not inlineIssues:
         return
 
-    from .requests import requests
+    import requests
 
     logging.captureWarnings(True)
 
@@ -1343,7 +1359,7 @@ def inlineRemoteIssues(doc):
     # Save the cache for later
     try:
         with io.open(config.scriptPath("spec-data", "github-issues.json"), 'w', encoding="utf-8") as f:
-            f.write(unicode(json.dumps(responses, ensure_ascii=False, indent=2, sort_keys=True)))
+            f.write(json.dumps(responses, ensure_ascii=False, indent=2, sort_keys=True))
     except Exception as e:
         warn("Couldn't save GitHub Issues cache to disk.\n{0}", e)
     return

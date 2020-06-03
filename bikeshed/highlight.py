@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import collections
 import itertools
 import re
@@ -112,7 +112,7 @@ def determineLineNumbers(doc, el):
                 if low >= high:
                     die("line-highlight ranges must be well-formed lo-hi - got '{0}'.", item, el=el)
                     continue
-                lineHighlights.update(range(low, high+1))
+                lineHighlights.update(list(range(low, high+1)))
             else:
                 try:
                     item = int(item)
@@ -135,7 +135,7 @@ def highlightEl(el, lang):
 
 
 def highlightWithWebIDL(text, el):
-    from .widlparser.widlparser import parser
+    from widlparser import parser
     '''
     Trick the widlparser emitter,
     which wants to output HTML via wrapping with start/end tags,
@@ -150,13 +150,13 @@ def highlightWithWebIDL(text, el):
             die("{0}", msg.rstrip())
     class HighlightMarker(object):
         # Just applies highlighting classes to IDL stuff.
-        def markupTypeName(self, text, construct):
+        def markup_type_name(self, text, construct):
             return ('\1n\2', '\3')
-        def markupName(self, text, construct):
+        def markup_name(self, text, construct):
             return ('\1g\2', '\3')
-        def markupKeyword(self, text, construct):
+        def markup_keyword(self, text, construct):
             return ('\1b\2', '\3')
-        def markupEnumValue(self, text, construct):
+        def markup_enum_value(self, text, construct):
             return ('\1s\2', '\3')
 
     if "\1" in text or "\2" in text or "\3" in text:
@@ -164,7 +164,7 @@ def highlightWithWebIDL(text, el):
         return
 
     widl = parser.Parser(text, IDLUI())
-    return coloredTextFromWidlStack(unicode(widl.markup(HighlightMarker())))
+    return coloredTextFromWidlStack(str(widl.markup(HighlightMarker())))
 
 def coloredTextFromWidlStack(widlText):
     coloredTexts = collections.deque()
@@ -218,7 +218,7 @@ def highlightWithPygments(text, lang, el):
     if lexer is None:
         die("'{0}' isn't a known syntax-highlighting language. See http://pygments.org/docs/lexers/. Seen on:\n{1}", lang, outerHTML(el), el=el)
         return
-    rawTokens = pygments.highlight(text, lexer, formatters.RawTokenFormatter())
+    rawTokens = str(pygments.highlight(text, lexer, formatters.RawTokenFormatter()), encoding="utf-8")
     coloredText = coloredTextFromRawTokens(rawTokens)
     return coloredText
 
@@ -412,7 +412,7 @@ def addLineWrappers(el, numbers=True, start=1, highlights=None):
     lineNumber = start
     for lineNo, node in grouper(childNodes(el), 2):
         if numbers or lineNumber in highlights:
-            lineNo.set("data-line", unicode(lineNumber))
+            lineNo.set("data-line", str(lineNumber))
         if lineNumber in highlights:
             addClass(node, "highlight-line")
             addClass(lineNo, "highlight-line")
@@ -422,10 +422,10 @@ def addLineWrappers(el, numbers=True, start=1, highlights=None):
                 if (lineNumber + i) in highlights:
                     addClass(lineNo, "highlight-line")
                     addClass(node, "highlight-line")
-                    lineNo.set("data-line", unicode(lineNumber))
+                    lineNo.set("data-line", str(lineNumber))
             lineNumber += internalNewlines
             if numbers:
-                lineNo.set("data-line-end", unicode(lineNumber))
+                lineNo.set("data-line-end", str(lineNumber))
         lineNumber += 1
     addClass(el, "line-numbered")
     return el
@@ -593,4 +593,4 @@ def grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
     args = [iter(iterable)] * n
-    return itertools.izip_longest(fillvalue=fillvalue, *args)
+    return itertools.zip_longest(fillvalue=fillvalue, *args)

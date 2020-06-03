@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 import io
-import json
 import os
-import urllib2
-from contextlib import closing
+import requests
 
 from ..messages import *
 
 def update(path, dryRun=False):
     try:
         say("Downloading web-platform-tests data...")
-        with closing(urllib2.urlopen("https://wpt.fyi/api/manifest")) as fh:
-            sha = fh.info().getheader("x-wpt-sha")
-            jsonData = json.load(fh, encoding="utf-8")
+        response = requests.get("https://wpt.fyi/api/manifest")
+        sha = response.headers["x-wpt-sha"]
+        jsonData = response.json()
     except Exception as e:
         die("Couldn't download web-platform-tests data.\n{0}", e)
         return

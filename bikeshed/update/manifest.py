@@ -1,14 +1,37 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import hashlib
 import io
 import os
-import urllib2
-from contextlib import closing
+import requests
 from datetime import datetime
 
 from ..messages import *
+
+# Manifest creation relies on these data structures.
+# Add to them whenever new types of data files are created.
+knownFiles = [
+    "biblio-keys.json",
+    "biblio-numeric-suffixes.json",
+    "bikeshed-version.txt",
+    "fors.json",
+    "languages.json",
+    "link-defaults.infotree",
+    "mdn.json",
+    "methods.json",
+    "specs.json",
+    "test-suites.json",
+    "version.txt",
+    "wpt-tests.txt",
+]
+knownFolders = [
+    "anchors",
+    "biblio",
+    "caniuse",
+    "headings",
+    "mdn",
+]
 
 def createManifest(path, dryRun=False):
     '''Generates a manifest file for all the data files.'''
@@ -28,30 +51,11 @@ def createManifest(path, dryRun=False):
     if not dryRun:
         try:
             with io.open(os.path.join(path, "manifest.txt"), 'w', encoding="utf-8") as fh:
-                fh.write(unicode(datetime.utcnow()) + "\n")
+                fh.write(str(datetime.utcnow()) + "\n")
                 for p,h in sorted(manifests, key=keyManifest):
                     fh.write("{0} {1}\n".format(h, p))
         except Exception as err:
             raise
-
-
-knownFiles = [
-    "fors.json",
-    "specs.json",
-    "methods.json",
-    "wpt-tests.txt",
-    "languages.json",
-    "biblio-keys.json",
-    "test-suites.json",
-    "link-defaults.infotree",
-]
-knownFolders = [
-    "anchors",
-    "biblio",
-    "headings",
-    "caniuse"
-]
-
 
 def keyManifest(manifest):
     name = manifest[0]
@@ -90,27 +94,35 @@ def updateByManifest(path, dryRun=False):
         warn("Couldn't find local manifest file.\n{0}", e)
         return False
     try:
-        with closing(urllib2.urlopen(ghPrefix + "manifest.txt")) as fh:
-            remoteManifest = [unicode(line, encoding="utf-8") for line in fh]
+        remoteManifest = requests.get(ghPrefix + "manifest.txt").text.splitlines()
     except Exception as e:
         warn("Couldn't download remote manifest file.\n{0}", e)
         return False
 
-    localDt = datetime.strptime(localManifest[0].strip(), "%Y-%m-%d %H:%M:%S.%f")
-    remoteDt = datetime.strptime(remoteManifest[0].strip(), "%Y-%m-%d %H:%M:%S.%f")
+    localDt = dtFromManifest(localManifest)
+    remoteDt = dtFromManifest(remoteManifest)
+    if remoteDt is None:
+        die("Something's gone wrong with the remote data; I can't read its timestamp. Please report this!")
+        return
 
-    if (remoteDt - datetime.utcnow()).days >= 2:
-        warn("Remote data is more than two days old; the update process has probably fallen over. Please report this!")
-    if localDt == remoteDt:
-        say("Local data is already up-to-date with remote ({0})", localDt.strftime("%Y-%m-%d %H:%M:%S"))
-        return True
-    elif localDt > remoteDt:
-        # No need to update, local data is more recent.
-        say("Local data is fresher ({0}) than remote ({1}), so nothing to update.", localDt.strftime("%Y-%m-%d %H:%M:%S"), remoteDt.strftime("%Y-%m-%d %H:%M:%S"))
-        return True
+    if localDt is not None:
+        if (remoteDt - datetime.utcnow()).days >= 2:
+            warn("Remote data is more than two days old; the update process has probably fallen over. Please report this!")
+        if localDt == remoteDt and localDt != 0:
+            say("Local data is already up-to-date with remote ({0})", localDt.strftime("%Y-%m-%d %H:%M:%S"))
+            return True
+        elif localDt > remoteDt:
+            # No need to update, local data is more recent.
+            say("Local data is fresher ({0}) than remote ({1}), so nothing to update.", localDt.strftime("%Y-%m-%d %H:%M:%S"), remoteDt.strftime("%Y-%m-%d %H:%M:%S"))
+            return True
 
     localFiles = dictFromManifest(localManifest)
+    if len(localFiles) == 0:
+        say("The local manifest seems borked; re-downloading everything...")
     remoteFiles = dictFromManifest(remoteManifest)
+    if len(remoteFiles) == 0:
+        die("The remote data doesn't have any data in it. Please report this!")
+        return
     newPaths = []
     for filePath,hash in remoteFiles.items():
         if hash != localFiles.get(filePath):
@@ -123,21 +135,20 @@ def updateByManifest(path, dryRun=False):
                 os.remove(localizePath(path, filePath))
                 deletedPaths.append(filePath)
         if deletedPaths:
-            print "Deleted {0} old data file{1}.".format(len(deletedPaths), "s" if len(deletedPaths) > 1 else "")
+            print("Deleted {0} old data file{1}.".format(len(deletedPaths), "s" if len(deletedPaths) > 1 else ""))
 
     if not dryRun:
         import time
-        messageDelta = .5 # seconds of *processor* time, not wall time :(
-        lastMsgTime = time.clock()
+        messageDelta = 2.5 # wall time
+        lastMsgTime = time.time()
         if newPaths:
             say("Updating {0} file{1}...", len(newPaths), "s" if len(newPaths) > 1 else "")
         for i,filePath in enumerate(newPaths):
             remotePath = ghPrefix + filePath
             localPath = localizePath(path, filePath)
             try:
-                with closing(urllib2.urlopen(remotePath)) as fh:
-                    newFile = unicode(fh.read(), encoding="utf-8")
-            except Exception,e:
+                newFile = requests.get(remotePath).text
+            except Exception as e:
                 warn("Couldn't download file '{0}'.\n{1}", remotePath, e)
                 return False
             try:
@@ -146,18 +157,18 @@ def updateByManifest(path, dryRun=False):
                     os.makedirs(dirPath)
                 with io.open(localPath, 'w', encoding="utf-8") as fh:
                     fh.write(newFile)
-            except Exception,e:
+            except Exception as e:
                 warn("Couldn't save file '{0}'.\n{1}", localPath, e)
                 return False
 
-            currFileTime = time.clock()
+            currFileTime = time.time()
             if (currFileTime - lastMsgTime) >= messageDelta:
                 say("Updated {0}/{1}...", i+1, len(newPaths))
                 lastMsgTime = currFileTime
         try:
             with io.open(os.path.join(path, "manifest.txt"), 'w', encoding="utf-8") as fh:
-                fh.write("".join(remoteManifest))
-        except Exception,e:
+                fh.write("\n".join(remoteManifest))
+        except Exception as e:
             warn("Couldn't save new manifest file.\n{0}", e)
             return False
     say("Done!")
@@ -176,8 +187,19 @@ def dictFromManifest(lines):
     into a dict of {path:hash}.
     First line of file is a datetime string, which we skip.
     '''
+    if len(lines) < 10:
+        # There's definitely more than 10 entries in the manifest;
+        # something borked
+        return {}
     ret = {}
     for line in lines[1:]:
         hash,_,path = line.strip().partition(" ")
         ret[path] = hash
     return ret
+
+def dtFromManifest(lines):
+    try:
+        return datetime.strptime(lines[0].strip(), "%Y-%m-%d %H:%M:%S.%f")
+    except:
+        # Sigh, something borked
+        return

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import io
 import json
 import os
+import random
 import re
 from collections import defaultdict
 from operator import itemgetter
@@ -12,6 +13,7 @@ from .RefSource import RefSource
 from .utils import *
 from .. import biblio
 from .. import config
+from .. import constants
 from .. import datablocks
 from ..htmlhelpers import *
 
@@ -19,13 +21,15 @@ class ReferenceManager(object):
 
     __slots__ = ["dataFile", "specs", "defaultSpecs", "ignoredSpecs", "replacedSpecs", "biblios", "loadedBiblioGroups",
         "biblioKeys", "biblioNumericSuffixes", "preferredBiblioNames", "headings", "defaultStatus", "localRefs", "anchorBlockRefs", "foreignRefs",
-        "shortname", "specLevel", "spec", "isDelta"]
+        "shortname", "specLevel", "spec", "testing", "isDelta"]
 
-    def __init__(self, defaultStatus=None, fileRequester=None):
+    def __init__(self, defaultStatus=None, fileRequester=None, testing=False):
         if fileRequester is None:
             self.dataFile = config.defaultRequester
         else:
             self.dataFile = fileRequester
+
+        self.testing = testing
 
         # Dict of {spec vshortname => spec data}
         self.specs = dict()
@@ -61,9 +65,9 @@ class ReferenceManager(object):
         self.headings = dict()
 
         if defaultStatus is None:
-            self.defaultStatus = config.refStatus.current
+            self.defaultStatus = constants.refStatus.current
         else:
-            self.defaultStatus = config.refStatus(defaultStatus)
+            self.defaultStatus = constants.refStatus[defaultStatus]
 
         self.localRefs = RefSource("local", fileRequester=fileRequester)
         self.anchorBlockRefs = RefSource("anchor-block", fileRequester=fileRequester)
@@ -149,9 +153,9 @@ class ReferenceManager(object):
         if md.defaultRefStatus:
             self.defaultStatus = md.defaultRefStatus
         elif md.status in config.snapshotStatuses:
-            self.defaultStatus = config.refStatus.snapshot
+            self.defaultStatus = constants.refStatus.snapshot
         elif md.status in config.shortToLongStatus:
-            self.defaultStatus = config.refStatus.current
+            self.defaultStatus = constants.refStatus.current
         self.shortname = md.shortname
         self.specLevel = md.level
         self.spec = md.vshortname
@@ -290,14 +294,15 @@ class ReferenceManager(object):
             if len(localRefs) == 1:
                 return localRefs[0]
             elif len(localRefs) > 1:
+                if self.testing:
+                    # Generate a stable answer
+                    chosenRef = sorted(localRefs, key=lambda x:x.url)[0]
+                else:
+                    # CHAOS MODE (so you're less likely to rely on it)
+                    chosenRef = random.choice(localRefs)
                 if error:
-                    linkerror("Multiple possible '{0}' local refs for '{1}'.\nArbitrarily chose the one with type '{2}' and for '{3}'.",
-                              linkType,
-                              text,
-                              localRefs[0].type,
-                              "' or '".join(localRefs[0].for_),
-                              el=el)
-                return localRefs[0]
+                    linkerror(f"Multiple possible '{linkType}' local refs for '{text}'.\nRandomly chose one of them; other instances might get a different random choice.", el=el)
+                return chosenRef
 
         if status == "local":
             # Already checked local refs, can early-exit now.
@@ -364,7 +369,7 @@ class ReferenceManager(object):
                 for argfullName, metadata in methodSignatures.items():
                     if text in metadata["args"] and (interfaceName in metadata["for"] or interfaceName is None) and metadata["shortname"] != self.shortname:
                         possibleMethods[metadata["shortname"]].append(argfullName)
-                possibleMethods = possibleMethods.values()
+                possibleMethods = list(possibleMethods.values())
                 if not possibleMethods:
                     # No method signatures with this argument/interface.
                     # Jump out and fail in a normal way.
@@ -391,13 +396,13 @@ class ReferenceManager(object):
             # Allow foo(bar) to be for'd to with just foo() if it's completely unambiguous.
             methodPrefix = methodName[:-1]
             candidates, _ = self.localRefs.queryRefs(linkType="functionish", linkFor=interfaceName)
-            methodRefs = {c.url: c for c in candidates if c.text.startswith(methodPrefix)}.values()
+            methodRefs = list({c.url: c for c in candidates if c.text.startswith(methodPrefix)}.values())
             if not methodRefs:
                 # Look for non-locals, then
                 c1,_ = self.anchorBlockRefs.queryRefs(linkType="functionish", spec=spec, status=status, statusHint=statusHint, linkFor=interfaceName, export=export, ignoreObsoletes=True)
                 c2,_ = self.foreignRefs.queryRefs(linkType="functionish", spec=spec, status=status, statusHint=statusHint, linkFor=interfaceName, export=export, ignoreObsoletes=True)
                 candidates = c1 + c2
-                methodRefs = {c.url: c for c in candidates if c.text.startswith(methodPrefix)}.values()
+                methodRefs = list({c.url: c for c in candidates if c.text.startswith(methodPrefix)}.values())
             if zeroRefsError and len(methodRefs) > 1:
                 # More than one possible foo() overload, can't tell which to link to
                 linkerror("Too many possible method targets to disambiguate '{0}/{1}'. Please specify the names of the required args, like 'foo(bar, baz)', in the 'for' attribute.", linkFor, text, el=el)
@@ -463,7 +468,10 @@ class ReferenceManager(object):
             reportMultiplePossibleRefs(simplifyPossibleRefs(refs), linkText=text, linkType=linkType, linkFor=linkFor, defaultRef=defaultRef, el=el)
         return defaultRef
 
-    def getBiblioRef(self, text, status=None, generateFakeRef=False, el=None, quiet=False):
+    def getBiblioRef(self, text, status=None, generateFakeRef=False, el=None, quiet=False, depth=0):
+        if depth > 100:
+            die("Data error in biblio files; infinitely recursing trying to find [{0}].", text)
+            return
         key = text.lower()
         while True:
             if key not in self.biblios:
@@ -515,10 +523,13 @@ class ReferenceManager(object):
             bib = biblio.StringBiblioEntry(**candidate)
         elif candidate['biblioFormat'] == "alias":
             # Follow the chain to the real candidate
-            bib = self.getBiblioRef(candidate["aliasOf"], status=status, el=el, quiet=True)
+            bib = self.getBiblioRef(candidate["aliasOf"], status=status, el=el, quiet=True, depth=depth+1)
+            if bib is None:
+                die("Biblio ref [{0}] claims to be an alias of [{1}], which doesn't exist.", text, candidate["aliasOf"])
+                return None
         elif candidate.get("obsoletedBy", "").strip():
             # Obsoleted by - throw an error and follow the chain
-            bib = self.getBiblioRef(candidate["obsoletedBy"], status=status, el=el, quiet=True)
+            bib = self.getBiblioRef(candidate["obsoletedBy"], status=status, el=el, quiet=True, depth=depth+1)
             if not quiet:
                 die("Obsolete biblio ref: [{0}] is replaced by [{1}].", candidate["linkText"], bib.linkText)
         else:

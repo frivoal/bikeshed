@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
+import certifi
 import io
 import json
 import os
-import urllib2
 from contextlib import closing
+from json_home_client import Client as APIClient
 
-from ..apiclient.apiclient import apiclient
 from ..messages import *
 
 testSuiteDataContentTypes = ["application/json", "application/vnd.csswg.shepherd.v1+json"]
@@ -14,12 +14,12 @@ testSuiteDataContentTypes = ["application/json", "application/vnd.csswg.shepherd
 def update(path, dryRun=False):
     try:
         say("Downloading test suite data...")
-        shepherd = apiclient.APIClient("https://api.csswg.org/shepherd/", version="vnd.csswg.shepherd.v1")
+        shepherd = APIClient("https://api.csswg.org/shepherd/", version="vnd.csswg.shepherd.v1", ca_cert_path=certifi.where())
         res = shepherd.get("test_suites")
-        if ((not res) or (406 == res.status)):
+        if ((not res) or (406 == res.status_code)):
             die("This version of the test suite API is no longer supported. Please update Bikeshed.")
             return
-        if res.contentType not in testSuiteDataContentTypes:
+        if res.content_type not in testSuiteDataContentTypes:
             die("Unrecognized test suite content-type '{0}'.", res.contentType)
             return
         rawTestSuiteData = res.data
@@ -46,7 +46,7 @@ def update(path, dryRun=False):
     if not dryRun:
         try:
             with io.open(os.path.join(path, "test-suites.json"), 'w', encoding="utf-8") as f:
-                f.write(unicode(json.dumps(testSuites, ensure_ascii=False, indent=2, sort_keys=True)))
+                f.write(json.dumps(testSuites, ensure_ascii=False, indent=2, sort_keys=True))
         except Exception as e:
             die("Couldn't save test-suite database to disk.\n{0}", e)
     say("Success!")

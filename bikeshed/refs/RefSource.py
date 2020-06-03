@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import copy
 import os
@@ -7,6 +7,7 @@ import re
 from collections import defaultdict
 
 from .. import config
+from .. import constants
 from .RefWrapper import RefWrapper
 from .utils import *
 
@@ -63,7 +64,7 @@ class RefSource(object):
         '''Nuts to lazy-loading, just load everything at once.'''
 
         if self.source not in self.lazyLoadedSources:
-            return self._refs.items()
+            return list(self._refs.items())
 
         path = config.scriptPath("spec-data", "anchors")
         for file in self.dataFile.walkFiles("anchors"):
@@ -74,7 +75,7 @@ class RefSource(object):
             with self.dataFile.fetch("anchors", file) as fh:
                 self._refs.update(decodeAnchors(fh))
                 self._loadedAnchorGroups.add(group)
-        return self._refs.items()
+        return list(self._refs.items())
 
     def queryRefs(self, **kwargs):
         if "exact" in kwargs:
@@ -116,7 +117,7 @@ class RefSource(object):
             else:
                 textsToSearch = list(linkTextVariations(text, linkType))
                 if text.endswith("()") and text in self.methods:
-                    textsToSearch += self.methods[text].keys()
+                    textsToSearch += list(self.methods[text].keys())
                 if (linkType is None or linkType in config.lowercaseTypes) and text.lower() != text:
                     textsToSearch += [t.lower() for t in textsToSearch]
                 refs = list(textRefsIterator(textsToSearch))
@@ -184,12 +185,12 @@ class RefSource(object):
             return refs, "for"
 
         def filterByStatus(refs, status):
-            if status in config.refStatus:
+            if status in constants.refStatus:
                 # If status is "current'", kill snapshot refs unless their spec *only* has a snapshot_url
-                if status == config.refStatus.current:
+                if status == constants.refStatus.current:
                     return [ref for ref in refs if ref.status == "current" or (ref.status == "snapshot" and self.specs.get(ref.spec,{}).get('current_url') is None)]
                 # If status is "snapshot", kill current refs if there's a corresponding snapshot ref for the same spec.
-                elif status == config.refStatus.snapshot:
+                elif status == constants.refStatus.snapshot:
                     snapshotSpecs = [ref.spec for ref in refs if ref.status == 'snapshot']
                     return [ref for ref in refs if ref.status == "snapshot" or (ref.status == "current" and ref.spec not in snapshotSpecs)]
                 else:
@@ -263,21 +264,21 @@ def decodeAnchors(linesIter):
     anchors = defaultdict(list)
     try:
         while True:
-            key = linesIter.next()[:-1]
+            key = next(linesIter)[:-1]
             a = {
-                "type": linesIter.next(),
-                "spec": linesIter.next(),
-                "shortname": linesIter.next(),
-                "level": linesIter.next(),
-                "status": linesIter.next(),
-                "url": linesIter.next(),
-                "export": linesIter.next() != "\n",
-                "normative": linesIter.next() != "\n",
+                "type": next(linesIter),
+                "spec": next(linesIter),
+                "shortname": next(linesIter),
+                "level": next(linesIter),
+                "status": next(linesIter),
+                "url": next(linesIter),
+                "export": next(linesIter) != "\n",
+                "normative": next(linesIter) != "\n",
                 "for": []
             }
             while True:
-                line = linesIter.next()
-                if line == b"-\n":
+                line = next(linesIter)
+                if line == "-\n":
                     break
                 a['for'].append(line)
             anchors[key].append(a)

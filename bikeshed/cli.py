@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, unicode_literals
+
 
 import argparse
 import os
 import sys
 
 from . import config
+from . import constants
 from . import update
 from .messages import *
 
@@ -14,7 +15,14 @@ def main():
     if len(sys.argv) == 1:
         sys.argv.append("spec")
 
-    argparser = argparse.ArgumentParser(description="Processes spec source files into valid HTML.")
+    try:
+        with open(config.scriptPath('..', 'semver.txt'), 'r') as fh:
+            semver = fh.read().strip()
+            semverText = f"Bikeshed v{semver}: "
+    except:
+        semverText = ""
+
+    argparser = argparse.ArgumentParser(description=f"{semverText}Processes spec source files into valid HTML.")
     argparser.add_argument("-q", "--quiet", dest="quiet", action="count", default=0,
                            help="Silences one level of message, least-important first.")
     argparser.add_argument("-s", "--silent", dest="silent", action="store_true",
@@ -25,7 +33,7 @@ def main():
                            help="Prevents the processor from actually saving anything to disk, but otherwise fully runs.")
     argparser.add_argument("--print", dest="printMode", action="store", default=None,
                            help="Print mode. Options are 'plain' (just text), 'console' (colored with console color codes), 'markup', and 'json'. Defaults to 'console'.")
-    argparser.add_argument("--die-on", dest="errorLevel", choices=[b"nothing", b"fatal", b"link-error", b"warning", b"everything"],
+    argparser.add_argument("--die-on", dest="errorLevel", choices=["nothing", "fatal", "link-error", "warning", "everything"],
                            help="Determines what sorts of errors cause Bikeshed to die (quit immediately with an error status code). Default is 'fatal'; the -f flag is a shorthand for 'nothing'")
 
     subparsers = argparser.add_subparsers(title="Subcommands", dest='subparserName')
@@ -94,6 +102,7 @@ def main():
     updateParser.add_argument("--backrefs", action="store_true", help="Download link backref data.")
     updateParser.add_argument("--biblio", action="store_true", help="Download biblio data.")
     updateParser.add_argument("--caniuse", action="store_true", help="Download Can I Use... data.")
+    updateParser.add_argument("--mdn", action="store_true", help="Download MDN Spec Links... data.")
     updateParser.add_argument("--link-defaults", dest="linkDefaults", action="store_true", help="Download link default data.")
     updateParser.add_argument("--test-suites", dest="testSuites", action="store_true", help="Download test suite data.")
     updateParser.add_argument("--languages", dest="languages", action="store_true", help="Download language/translation data.")
@@ -190,18 +199,18 @@ def main():
 
     options, extras = argparser.parse_known_args()
 
-    config.quiet = options.quiet
+    constants.quiet = options.quiet
     if options.silent:
-        config.quiet = float("infinity")
-    config.setErrorLevel(options.errorLevel)
-    config.dryRun = options.dryRun
+        constants.quiet = float("infinity")
+    constants.setErrorLevel(options.errorLevel)
+    constants.dryRun = options.dryRun
     if options.printMode is None:
         if "NO_COLOR" in os.environ or os.environ.get("TERM") == "dumb":
-            config.printMode = "plain"
+            constants.printMode = "plain"
         else:
-            config.printMode = "console"
+            constants.printMode = "console"
     else:
-        config.printMode = options.printMode
+        constants.printMode = options.printMode
 
     update.fixupDataFiles()
     if options.subparserName == "update":
@@ -233,7 +242,7 @@ def main():
 
 
 def handleUpdate(options, extras):
-    update.update(anchors=options.anchors, backrefs=options.backrefs, biblio=options.biblio, caniuse=options.caniuse, linkDefaults=options.linkDefaults, testSuites=options.testSuites, languages=options.languages, wpt=options.wpt, dryRun=config.dryRun, force=options.force)
+    update.update(anchors=options.anchors, backrefs=options.backrefs, biblio=options.biblio, caniuse=options.caniuse, mdn=options.mdn, linkDefaults=options.linkDefaults, testSuites=options.testSuites, languages=options.languages, wpt=options.wpt, dryRun=constants.dryRun, force=options.force)
 
 
 def handleSpec(options, extras):
@@ -266,7 +275,7 @@ def handleWatch(options, extras):
     from . import metadata
     from .Spec import Spec
     # Can't have an error killing the watcher
-    config.setErrorLevel("nothing")
+    constants.setErrorLevel("nothing")
     doc = Spec(inputFilename=options.infile, token=options.ghToken)
     doc.mdCommandLine = metadata.fromCommandLine(extras)
     if options.byos:
@@ -277,7 +286,7 @@ def handleWatch(options, extras):
 def handleServe(options, extras):
     from . import metadata
     from .Spec import Spec
-    config.setErrorLevel("nothing")
+    constants.setErrorLevel("nothing")
     doc = Spec(inputFilename=options.infile, token=options.ghToken)
     doc.mdCommandLine = metadata.fromCommandLine(extras)
     if options.byos:
@@ -288,8 +297,8 @@ def handleServe(options, extras):
 def handleDebug(options, extras):
     from . import metadata
     from .Spec import Spec
-    config.setErrorLevel("nothing")
-    config.quiet = 2
+    constants.setErrorLevel("nothing")
+    constants.quiet = 2
     if options.printExports:
         doc = Spec(inputFilename=options.infile)
         doc.mdCommandLine = metadata.fromCommandLine(extras)
@@ -299,26 +308,26 @@ def handleDebug(options, extras):
         doc = Spec(inputFilename=options.infile)
         doc.mdCommandLine = metadata.fromCommandLine(extras)
         doc.preprocess()
-        exec("print config.printjson({0})".format(options.jsonCode))
+        exec(f"print(config.printjson({options.jsonCode}))")
     elif options.code:
         doc = Spec(inputFilename=options.infile)
         doc.mdCommandLine = metadata.fromCommandLine(extras)
         doc.preprocess()
-        exec("print {0}".format(options.code))
+        exec(f"print({options.code})")
     elif options.linkText:
         doc = Spec(inputFilename=options.infile)
         doc.mdCommandLine = metadata.fromCommandLine(extras)
         doc.preprocess()
         refs = doc.refs.refs[options.linkText] + doc.refs.refs[options.linkText + "\n"]
-        config.quiet = options.quiet
-        if not config.quiet:
+        constants.quiet = options.quiet
+        if not constants.quiet:
             p("Refs for '{0}':".format(options.linkText))
         # Get ready for JSONing
         for ref in refs:
             ref['level'] = str(ref['level'])
         p(config.printjson(refs))
     elif options.refreshData:
-        config.quiet = 0
+        constants.quiet = 0
         update.updateReadonlyDataFiles()
         warn("Don't forget to bump the version number!")
 
@@ -327,8 +336,8 @@ def handleRefs(options, extras):
     from . import metadata
     from .refs.ReferenceManager import ReferenceManager
     from .Spec import Spec
-    config.setErrorLevel("nothing")
-    config.quiet = 10
+    constants.setErrorLevel("nothing")
+    constants.quiet = 10
     doc = Spec(inputFilename=options.infile)
     if doc.valid:
         doc.mdCommandLine = metadata.fromCommandLine(extras)
@@ -338,9 +347,9 @@ def handleRefs(options, extras):
         rm = ReferenceManager()
         rm.initializeRefs()
     if options.text:
-        options.text = unicode(options.text, encoding="utf-8")
+        options.text = options.text
     refs = rm.queryAllRefs(text=options.text, linkFor=options.linkFor, linkType=options.linkType, status=options.status, spec=options.spec, latestOnly=options.latestOnly, exact=options.exact)
-    if config.printMode == "json":
+    if constants.printMode == "json":
         p(json.dumps(refs, indent=2, default=config.getjson))
     else:
         p(config.printjson(refs))
@@ -368,8 +377,8 @@ def handleTest(options, extras):
     from .Spec import Spec
     from . import test
     md = metadata.fromCommandLine(extras)
-    config.setErrorLevel("nothing")
-    config.quiet = 100
+    constants.setErrorLevel("nothing")
+    constants.quiet = 100
     if options.rebase:
         test.rebase(Spec, options.testFiles, md=md)
     else:
